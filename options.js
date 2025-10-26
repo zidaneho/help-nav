@@ -1,6 +1,4 @@
-const page = document.getElementById('buttonDiv');
-const selectedClassName = 'current';
-const presetButtonColors = ['#3aa757', '#e8453c', '#f9bb2d', '#4688f1'];
+const selectedClassName = "current";
 
 // API configuration
 const claudeApiKeyInput = document.getElementById('claudeApiKey');
@@ -27,34 +25,7 @@ function handleButtonClick(event) {
   chrome.storage.sync.set({ color });
 }
 
-// Add a button to the page for each supplied color
-function constructOptions(buttonColors) {
-  chrome.storage.sync.get('color', (data) => {
-    const currentColor = data.color;
-
-    // For each color we were provided…
-    for (const buttonColor of buttonColors) {
-      // …create a button with that color…
-      const button = document.createElement('button');
-      button.dataset.color = buttonColor;
-      button.style.backgroundColor = buttonColor;
-
-      // …mark the currently selected color…
-      if (buttonColor === currentColor) {
-        button.classList.add(selectedClassName);
-      }
-
-      // …and register a listener for when that button is clicked
-      button.addEventListener('click', handleButtonClick);
-      page.appendChild(button);
-    }
-  });
-}
-
-// Initialize the page by constructing the color options
-constructOptions(presetButtonColors);
-
-// Load saved settings
+// Load saved Fish Audio settings
 chrome.storage.local.get(['claudeApiKey', 'fishAudioApiKey', 'fishAudioReferenceId', 'showDebugMarker'], (data) => {
   if (data.claudeApiKey) {
     claudeApiKeyInput.value = data.claudeApiKey;
@@ -92,15 +63,3 @@ saveBtn.addEventListener('click', () => {
     chrome.runtime.sendMessage({ type: 'RELOAD_CONFIG' });
   });
 });
-
-// Show status message
-function showStatus(message, type) {
-  statusDiv.textContent = message;
-  statusDiv.className = `status ${type}`;
-  
-  if (type === 'success') {
-    setTimeout(() => {
-      statusDiv.className = 'status';
-    }, 3000);
-  }
-}

@@ -298,7 +298,7 @@ function findElement(keyword) {
 
   // First pass: exact match
   for (const el of elements) {
-    const text = getSafeElementText(el).toLowerCase();
+    const text = getSafeElementText(el).toLowerCase().trim();
     if (text === keyword) {
       console.log("findElement: Found exact match:", el);
       return el;
@@ -307,7 +307,7 @@ function findElement(keyword) {
 
   // Second pass: partial match
   for (const el of elements) {
-    const text = getSafeElementText(el).toLowerCase();
+    const text = getSafeElementText(el).toLowerCase().trim();
     if (text.includes(keyword)) {
       console.log("findElement: Found partial match:", el, "text:", text);
       return el;

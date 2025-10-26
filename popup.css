@@ -1,0 +1,130 @@
+:root {
+  --brand-gradient: linear-gradient(135deg, #7bb9ff 0%, #4b67a2 100%);
+  --brand-primary: #667eea;
+  --bg: #f8fafc;
+  --panel-bg: #ffffff;
+  --text-primary: #0f172a;
+  --text-muted: #475569;
+  --border-color: #e2e8f0;
+  --ok: #16a34a;
+  --warn: #ea580c;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  width: 320px;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial,
+    sans-serif;
+}
+
+/* Header */
+.header {
+  background: var(--brand-gradient);
+  color: white;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 16px;
+}
+.logo {
+  width: 24px;
+  height: 24px;
+}
+.settings-btn {
+  font-size: 20px;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.settings-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Content Area */
+.content-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+#hints {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+#voiceEngine {
+  font-size: 13px;
+}
+
+/* Cursor Settings */
+#cursor-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#cursor-settings.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+#cursor-settings label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#cursor-settings input[type="radio"] {
+  accent-color: var(--brand-primary);
+  margin: 0;
+}
+.cursor-preview {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  margin-left: 2px;
+  /* Removed transform properties */
+}
+/* Removed .cursor-preview.default rule */
+
+/* Utilities */
+.tts-ok {
+  color: var(--ok) !important;
+  font-weight: 500;
+}
+.tts-warn {
+  color: var(--warn) !important;
+  font-weight: 500;
+}

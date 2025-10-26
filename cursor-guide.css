@@ -1,0 +1,117 @@
+/* --- Original Large Cursor Style --- */
+
+/* 1. Large, accessible cursor */
+.nav-large-cursor {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="%23000" stroke="%23fff" stroke-width="2" d="M2 2 L2 28 L10 20 L14 28 L18 26 L14 18 L24 18 Z"/></svg>')
+      0 0,
+    auto !important;
+}
+
+/* --- Assistant Guidance Styles (from cursor-guide.js) --- */
+
+/* Animated cursor pointer for guidance (the '👆') */
+.nav-animated-cursor {
+  position: fixed;
+  width: 40px;
+  height: 40px;
+  pointer-events: none;
+  z-index: 999999;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.nav-animated-cursor::before {
+  content: "👆";
+  position: absolute;
+  font-size: 32px;
+  animation: pointPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pointPulse {
+  0%,
+  100% {
+    transform: scale(1) translateY(0);
+  }
+  50% {
+    transform: scale(1.2) translateY(-5px);
+  }
+}
+
+/* Enlarged clickable areas for accessibility */
+.nav-enlarged-target {
+  position: relative;
+  transform: scale(1.15);
+  transition: transform 0.2s ease;
+  z-index: 10;
+}
+
+.nav-enlarged-target:hover {
+  transform: scale(1.2);
+}
+
+/* Focus ring for keyboard navigation */
+.nav-focus-ring {
+  outline: 4px solid #667eea !important;
+  outline-offset: 4px !important;
+  box-shadow: 0 0 0 8px rgba(102, 126, 234, 0.2) !important;
+}
+
+/* Tooltip for guided elements */
+.nav-tooltip {
+  position: absolute;
+  background: #1f2937;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 999999;
+  pointer-events: none;
+  animation: tooltipFadeIn 0.3s ease;
+}
+
+.nav-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #1f2937;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Pulsing dot on target */
+.nav-target-dot {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: #ff6b6b;
+  border-radius: 50%;
+  border: 3px solid white;
+  box-shadow: 0 0 0 4px rgba(255, 107, 107, 0.3);
+  animation: dotPulse 1.5s ease-in-out infinite;
+  z-index: 999998; /* Ensure it's on top */
+}
+
+@keyframes dotPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 4px rgba(255, 107, 107, 0.3);
+  }
+  50% {
+    transform: scale(1.3);
+    box-shadow: 0 0 0 8px rgba(255, 107, 107, 0.1);
+  }
+}
