@@ -76,46 +76,33 @@ async function generateFishAudioTTS(text) {
 }
 
 // Query Claude API for action reasoning
-async function queryClaudeForAction(userCommand, domSnapshot, pageUrl) {
-  const systemPrompt = `You are an intelligent web navigation assistant. You help users navigate websites by identifying the correct elements to interact with.
-
-Given a user's command, the current page URL, and a simplified DOM structure, your job is to:
-1. Understand what the user wants to do
-2. Check if the current page is relevant to the user's goal
-3. Identify the best element(s) to interact with, OR suggest the user needs to navigate elsewhere first
+async function queryClaudeForAction(userCommand, base64ImageData, pageUrl) {
+  const systemPrompt = `You are an intelligent web navigation assistant. You will be given a SCREENSHOT of a webpage and a user's command.
+Your job is to:
+1. Analyze the image to understand the full visual layout.
+2. Understand the user's command.
+3. Identify the best element (button, link, input) to interact with to achieve the user's goal.
+4. Use your OCR capabilities to find the EXACT text on that element.
 
 Return your response as JSON with this structure:
 {
-  "reasoning": "Brief explanation of what you understood and whether the page is relevant",
+  "reasoning": "Brief explanation of what you see and why you chose this action.",
   "action": "click" | "highlight" | "scroll" | "goback" | "not_found",
-  "selector": "text to search for in elements (for click/highlight)",
+  "selector": "The EXACT text on the element to click/highlight (e.g., 'Log In', 'Search', 'Appointments'). This is critical.",
   "direction": "up" | "down" (for scroll),
-  "speak": "What to say to the user",
-  "multiStep": false | true,
-  "nextSteps": ["step 1", "step 2"] (if multi-step)
+  "speak": "What to say to the user"
 }
 
-IMPORTANT CONTEXT RULES:
-- If the user's goal doesn't match the current page (e.g., "make appointment" on google.com), use action "not_found" and tell them they're on the wrong page
-- If the page IS relevant but you can't find the exact element, still suggest the closest match
-- For search engines (google.com, bing.com), suggest using the search box to find the right site
+IMPORTANT:
+- Your primary goal is to find the 'selector' text.
+- If the user says "click search," find the element that says "Search" or has a search icon and return that text.
+- If you can't find a relevant element, use action "not_found".
+- For scroll/goback, the 'selector' can be null.`;
 
-Examples:
-- User: "I want to make an appointment" on dmv.ca.gov → action: "click", selector: "appointments"
-- User: "I want to make an appointment" on google.com → action: "not_found", speak: "You're on Google. Try searching for 'DMV appointment' first, or tell me which service you want to book an appointment for."
-- User: "click search" → selector: "search"
-- User: "scroll down" → action: "scroll", direction: "down"
+  const userPrompt = `User Command: "${userCommand}"
 
-Be helpful and context-aware!`;
-
-  const userPrompt = `Page URL: ${pageUrl}
-
-DOM Snapshot (interactive elements):
-${domSnapshot}
-
-User Command: "${userCommand}"
-
-Analyze if this page is relevant to the user's goal. What action should be taken? Respond with JSON only.`;
+Analyze the attached screenshot for the page at URL: ${pageUrl}.
+Based on the user's command, what action should be taken? Respond with JSON only.`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -133,7 +120,17 @@ Analyze if this page is relevant to the user's goal. What action should be taken
         messages: [
           {
             role: "user",
-            content: userPrompt,
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: "image/png",
+                  data: base64ImageData,
+                },
+              },
+              { type: "text", text: userPrompt },
+            ],
           },
         ],
       }),
@@ -235,48 +232,23 @@ async function handleCommand(text) {
     }
 
     try {
-      // Request DOM snapshot from content script with timeout
-      const timeoutPromise = new Promise((resolve) => {
-        setTimeout(() => resolve(null), 5000); // 5 second timeout
+      // Capture screenshot of the visible tab
+      const imageDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
+        format: "png",
       });
-
-      const responsePromise = new Promise((resolve) => {
-        chrome.tabs.sendMessage(
-          tab.id,
-          { type: "GET_DOM_SNAPSHOT" },
-          (response) => {
-            if (chrome.runtime.lastError) {
-              console.error("Message error:", chrome.runtime.lastError.message);
-              resolve(null);
-            } else {
-              resolve(response);
-            }
-          }
-        );
-      });
-
-      const response = await Promise.race([responsePromise, timeoutPromise]);
-
-      if (!response) {
-        console.error(
-          "Could not get DOM snapshot - content script may not be loaded"
-        );
-        sendToActiveTab({
-          type: "SPEAK_ERROR",
-          message:
-            "Please refresh the page and try again. Spotlight needs to load on this page first.",
-        });
-        return;
+      
+      if (!imageDataUrl) {
+        throw new Error("Failed to capture screenshot");
       }
-
-      console.log("Got DOM snapshot, querying Claude...");
-
-      // Send command + DOM to Claude for reasoning
-      const action = await queryClaudeForAction(
-        text,
-        response.domSnapshot,
-        response.url
-      );
+      
+      const base64ImageData = imageDataUrl.split(",")[1];
+      
+      if (!base64ImageData) {
+        throw new Error("Failed to extract base64 data from screenshot");
+      }
+      
+      console.log("Screenshot captured, querying Claude...");
+      const action = await queryClaudeForAction(text, base64ImageData, tab.url);
 
       if (action) {
         console.log("Claude reasoned action:", action);
