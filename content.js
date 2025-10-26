@@ -1,6 +1,8 @@
 // content.js
 // Receives actions from background.js and interacts with the DOM
 
+console.log('✅ Spotlight content.js loaded on:', window.location.href);
+
 // Check if Fish Audio is configured
 let useFishAudio = false;
 let ttsRequestId = 0;
@@ -173,14 +175,94 @@ function createStepIndicator(text) {
   setTimeout(() => indicator.remove(), 5000);
 }
 
-// Listen for Fish Audio config reload and TTS responses
-chrome.runtime.onMessage.addListener(async (msg) => {
-  if (msg.type === "RELOAD_FISH_AUDIO_CONFIG") {
-    // Reload config
+// Generate simplified DOM snapshot for Claude
+function getDOMSnapshot() {
+  const elements = document.querySelectorAll(
+    "button, a, input, textarea, select, [role=button], [role=link], h1, h2, h3, label"
+  );
+  
+  const snapshot = [];
+  elements.forEach((el, idx) => {
+    const text = (el.innerText || el.textContent || el.value || el.ariaLabel || el.placeholder || el.title || "").trim();
+    if (text && text.length < 100) { // Skip very long text
+      const tag = el.tagName.toLowerCase();
+      const role = el.getAttribute('role') || '';
+      const type = el.getAttribute('type') || '';
+      snapshot.push(`[${idx}] <${tag}${role ? ` role="${role}"` : ''}${type ? ` type="${type}"` : ''}> ${text.substring(0, 50)}`);
+    }
+  });
+  
+  // Limit to first 100 elements to avoid token limits
+  return snapshot.slice(0, 100).join('\n');
+}
+
+// Unified message listener - handles all messages from background and popup
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  console.log('content.js: Received message type:', msg.type);
+  
+  // Get DOM snapshot for Claude
+  if (msg.type === "GET_DOM_SNAPSHOT") {
+    console.log('content.js: Generating DOM snapshot...');
+    const snapshot = getDOMSnapshot();
+    sendResponse({
+      domSnapshot: snapshot,
+      url: window.location.href
+    });
+    return true; // Keep channel open for async response
+  }
+  
+  // Handle NAV_ACTION commands from background.js
+  if (msg.type === "NAV_ACTION") {
+    console.log('content.js: Received NAV_ACTION message:', msg);
+    const { action, selector, speak: voice, direction } = msg.payload;
+    console.log('content.js: Action:', action, 'Selector:', selector);
+    
+    if (action === "scroll") {
+      window.scrollBy({
+        top: direction === "up" ? -400 : 400,
+        behavior: "smooth",
+      });
+      speak(voice);
+    } else if (action === "goback") {
+      window.history.back();
+      speak(voice);
+    } else if (action === "highlight") {
+      console.log('content.js: Attempting to highlight with selector:', selector);
+      const el = findElement(selector);
+      if (el) {
+        console.log('content.js: Element found, highlighting:', el);
+        highlight(el);
+      } else {
+        console.log('content.js: No element found for selector:', selector);
+      }
+      speak(voice);
+    } else if (action === "click") {
+      console.log('content.js: Attempting to find element for click with selector:', selector);
+      const el = findElement(selector);
+      if (el) {
+        console.log('content.js: Element found, highlighting:', el);
+        highlight(el);
+        // Don't auto-click - just show where to click
+      } else {
+        console.log('content.js: No element found for selector:', selector);
+        speak('Sorry, I could not find ' + selector + ' on this page.');
+      }
+      speak(voice);
+    }
+  }
+  
+  // Reload config
+  if (msg.type === "RELOAD_FISH_AUDIO_CONFIG" || msg.type === "RELOAD_CONFIG") {
     chrome.storage.sync.get(['fishAudioApiKey'], (data) => {
       useFishAudio = !!data.fishAudioApiKey;
       console.log('Fish Audio config reloaded:', useFishAudio ? 'enabled' : 'disabled');
     });
+  }
+  
+  // Speak error message
+  if (msg.type === "SPEAK_ERROR") {
+    console.log('content.js: Speaking error:', msg.message);
+    speak(msg.message);
   }
   
   // Handle TTS audio response from background
@@ -256,46 +338,5 @@ chrome.runtime.onMessage.addListener(async (msg) => {
         assistant.addMessage(`Could not find: ${msg.keyword}. Try being more specific.`);
       }
     }
-  }
-});
-
-// Handle commands from background.js
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type !== "NAV_ACTION") return;
-
-  console.log('content.js: Received NAV_ACTION message:', msg);
-  const { action, selector, speak: voice, direction } = msg.payload;
-  console.log('content.js: Action:', action, 'Selector:', selector);
-  if (action === "scroll") {
-    window.scrollBy({
-      top: direction === "up" ? -400 : 400,
-      behavior: "smooth",
-    });
-    speak(voice);
-  } else if (action === "goback") {
-    window.history.back();
-    speak(voice);
-  } else if (action === "highlight") {
-    console.log('content.js: Attempting to highlight with selector:', selector);
-    const el = findElement(selector);
-    if (el) {
-      console.log('content.js: Element found, highlighting:', el);
-      highlight(el);
-    } else {
-      console.log('content.js: No element found for selector:', selector);
-    }
-    speak(voice);
-  } else if (action === "click") {
-    console.log('content.js: Attempting to find element for click with selector:', selector);
-    const el = findElement(selector);
-    if (el) {
-      console.log('content.js: Element found, highlighting:', el);
-      highlight(el);
-      // Don't auto-click - just show where to click
-    } else {
-      console.log('content.js: No element found for selector:', selector);
-      speak('Sorry, I could not find ' + selector + ' on this page.');
-    }
-    speak(voice);
   }
 });

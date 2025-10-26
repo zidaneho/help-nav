@@ -222,8 +222,19 @@ if (localStorage.getItem("micPermissionGranted") === "true") {
   }
 }
 
-// Check Fish Audio configuration
-chrome.storage.sync.get(["fishAudioApiKey"], (data) => {
+// Check configuration
+chrome.storage.sync.get(["claudeApiKey", "fishAudioApiKey"], (data) => {
+  // Check Claude (required for intelligent commands)
+  if (!data.claudeApiKey) {
+    statusText.textContent = "⚠️ Configure Claude API";
+    statusText.style.color = "#ea580c";
+    statusText.style.cursor = "pointer";
+    statusText.addEventListener("click", () => {
+      chrome.runtime.openOptionsPage();
+    });
+  }
+  
+  // Check Fish Audio (optional for TTS)
   if (data.fishAudioApiKey) {
     ttsStatus.textContent = "🐟 Fish Audio (Premium)";
     ttsStatus.style.color = "#16a34a";

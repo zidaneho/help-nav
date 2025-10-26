@@ -76,17 +76,25 @@
     </style>
   </head>
   <body>
-    <h1>Voice Navigator Settings</h1>
+    <h1>Spotlight Settings</h1>
     
     <div class="section">
-      <h2>Fish Audio API Configuration</h2>
-      <label for="apiKey">API Key</label>
+      <h2>🧠 Claude AI Configuration (Required)</h2>
+      <label for="claudeApiKey">Claude API Key</label>
+      <input type="password" id="claudeApiKey" placeholder="Enter your Anthropic Claude API key" />
+      <p class="info">Get your API key from <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a></p>
+      <p class="info"><strong>Required for intelligent command understanding</strong> - Spotlight uses Claude to understand complex commands like "I want to make an appointment"</p>
+    </div>
+
+    <div class="section">
+      <h2>🐟 Fish Audio TTS (Optional)</h2>
+      <label for="apiKey">Fish Audio API Key</label>
       <input type="password" id="apiKey" placeholder="Enter your Fish Audio API key" />
       <p class="info">Get your API key from <a href="https://fish.audio" target="_blank">fish.audio</a></p>
       
       <label for="referenceId">Reference ID (Optional)</label>
       <input type="text" id="referenceId" placeholder="Enter voice model reference ID" />
-      <p class="info">Leave empty to use the default voice model</p>
+      <p class="info">Leave empty to use the default voice model or browser's native TTS</p>
       
       <button id="saveBtn">Save Settings</button>
       <div id="status" class="status"></div>

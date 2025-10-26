@@ -5,7 +5,8 @@ A voice-guided web navigation assistant that helps users browse websites using v
 ## Features
 
 ### Core Features
-- 🎤 **Voice Commands**: Navigate websites hands-free with natural voice commands
+- 🧠 **Claude AI Reasoning**: Understands complex commands like "I want to make an appointment" and figures out what to click
+- 🎤 **Natural Voice Commands**: Navigate websites hands-free with conversational language
 - 💡 **Spotlight Panel**: Interactive assistant that minimizes to stay out of your way
 - 🎯 **Smart Highlighting**: Multi-layer visual feedback (arrows, pulsing dots, tooltips, animated cursor)
 - 👆 **Show, Don't Do**: Highlights where to click instead of auto-clicking, maintaining user control
@@ -27,12 +28,21 @@ A voice-guided web navigation assistant that helps users browse websites using v
 
 ### Voice Commands
 
-- **"scroll down"** - Scroll the page down
-- **"scroll up"** - Scroll the page up
-- **"click [element]"** - Show where to click (e.g., "click login", "click search")
-- **"highlight [element]"** - Highlight an element with visual guides
+Spotlight uses Claude AI to understand both simple and complex commands:
+
+**Simple Commands:**
+- **"scroll down"** / **"scroll up"** - Navigate the page
+- **"click login"** / **"click search"** - Find specific elements
 - **"go back"** - Navigate back to the previous page
 - **"repeat"** - Repeat the last action
+
+**Intelligent Complex Commands (powered by Claude):**
+- **"I want to make an appointment for my driver's license"** - Claude analyzes the page and finds "Appointments", "Schedule", or "Book" buttons
+- **"Help me find cheap flights to New York"** - Finds search or booking interfaces
+- **"I need to update my address"** - Identifies account/profile settings
+- **"Show me how to contact support"** - Finds contact or help links
+
+Claude reads the page content and understands your intent, finding the right elements even if you don't know exactly what they're called!
 
 ### Spotlight Panel
 
@@ -53,7 +63,17 @@ The Spotlight panel provides a friendly chat interface for guidance:
 
 ## Setup Instructions
 
-### 1. Install the Extension
+### 1. Get Claude API Key (Required)
+
+Spotlight uses Claude AI to understand complex commands intelligently:
+
+1. Visit [console.anthropic.com](https://console.anthropic.com/)
+2. Sign up or log in to your account
+3. Go to API Keys section
+4. Create a new API key
+5. Copy the key - you'll need it in step 3
+
+### 2. Install the Extension
 
 1. Open Chrome and navigate to `chrome://extensions/`
 2. Enable "Developer mode" in the top-right corner
@@ -61,14 +81,24 @@ The Spotlight panel provides a friendly chat interface for guidance:
 4. Select the `help-nav` directory
 5. The extension will now be installed
 
-### 2. Start Using
+### 3. Configure Claude API
+
+1. Click the extension icon → "Settings"
+2. Paste your Claude API key in the "Claude AI Configuration" section
+3. Click "Save Settings"
+
+**You must configure Claude to use Spotlight's intelligent commands!**
+
+### 4. Start Using
 
 1. Click the extension icon
 2. Click "🎤 Start listening" (allow microphone access when prompted)
-3. Say a voice command (e.g., "click search")
-4. Spotlight highlights where to click - you perform the action yourself!
+3. Say an intelligent command:
+   - Simple: "click search"
+   - Complex: **"I want to make an appointment for my driver's license"**
+4. Spotlight uses Claude to understand your intent and highlights where to click!
 
-### 3. Configure Fish Audio (Optional)
+### 5. Configure Fish Audio (Optional)
 
 For premium TTS voices:
 
@@ -94,16 +124,65 @@ Note: Without Fish Audio, Spotlight uses your browser's native text-to-speech.
 
 ### Architecture
 
-Spotlight uses a multi-layered approach for maximum accessibility:
+Spotlight uses a multi-layered AI-powered approach:
 
-1. **Background Layer** (background.js): Handles command parsing and Fish Audio TTS API calls
-2. **Content Layer** (content.js): Coordinates all visual elements and finds target elements
-3. **Visual Modules**:
-   - `assistant-panel.js`: Provides Spotlight panel (chat interface and conversational guidance)
+1. **AI Reasoning Layer** (Claude API):
+   - Receives user command + simplified DOM snapshot
+   - Understands user intent using natural language processing
+   - Identifies the best element(s) to interact with
+   - Returns structured action with reasoning
+
+2. **Background Layer** (background.js):
+   - Handles Claude API calls (no CORS restrictions)
+   - Processes Fish Audio TTS API calls
+   - Coordinates between popup and content scripts
+
+3. **Content Layer** (content.js):
+   - Generates DOM snapshots for Claude
+   - Finds elements based on Claude's reasoning
+   - Coordinates all visual elements and highlighting
+
+4. **Visual Modules**:
+   - `assistant-panel.js`: Spotlight panel (chat interface and conversational guidance)
    - `cursor-guide.js`: Manages cursor enhancements and visual pointers
-4. **User Interface**: Popup for voice controls, Options page for Fish Audio configuration
 
-**Key Design Choice**: Spotlight highlights elements instead of auto-clicking them. This maintains user control and helps users learn where elements are located.
+5. **User Interface**: Popup for voice controls, Options page for API configuration
+
+**Key Design Choices**:
+- **Claude AI**: Replaces simple keyword matching with intelligent reasoning
+- **DOM Context**: Sends page structure to Claude for accurate element identification
+- **Show, Don't Click**: Highlights elements instead of auto-clicking to maintain user control and help users learn
+
+### Claude AI Integration
+
+Spotlight uses Anthropic's Claude 3.5 Sonnet for intelligent command understanding:
+
+**How It Works:**
+1. **User speaks**: "I want to make an appointment for my driver's license"
+2. **DOM Snapshot**: Content script extracts interactive elements (buttons, links, inputs) with their text
+3. **Claude Reasoning**: Background script sends command + DOM to Claude API
+4. **Action Response**: Claude analyzes and returns:
+   ```json
+   {
+     "reasoning": "User wants to schedule a driver's license appointment",
+     "action": "click",
+     "selector": "appointments",
+     "speak": "I found the appointments button. Click it to schedule."
+   }
+   ```
+5. **Element Highlighting**: Content script finds and highlights the element
+6. **User Action**: User clicks the highlighted element themselves
+
+**Why Claude?**
+- **Natural Language**: Understands intent, not just keywords
+- **Context Aware**: Reads the actual page content
+- **Multi-Step Ready**: Can identify sequences of actions (future feature)
+- **No Training**: Works on any website without custom configuration
+
+**Privacy**:
+- Only sends: user command + DOM snapshot (text of buttons/links)
+- Does NOT send: full HTML, images, passwords, or sensitive data
+- Claude API: https://api.anthropic.com/v1/messages
 
 ### Fish Audio Integration (Optional)
 
@@ -118,10 +197,11 @@ Spotlight supports Fish Audio's premium TTS API for high-quality voice responses
 
 ### Permissions
 
-- `storage` - Save user settings and API keys
+- `storage` - Save user settings and API keys (Claude, Fish Audio)
 - `activeTab` - Interact with the current webpage
-- `scripting` - Inject content scripts
-- `https://api.fish.audio/*` - Make requests to Fish Audio API
+- `scripting` - Inject content scripts for DOM analysis
+- `https://api.anthropic.com/*` - Make requests to Claude AI for command understanding
+- `https://api.fish.audio/*` - Make requests to Fish Audio TTS API (optional)
 
 ## Development
 
@@ -161,6 +241,20 @@ This extension is designed for:
 
 ## Troubleshooting
 
+**"Configure Claude API" warning in popup?**
+- You haven't set up your Claude API key yet
+- Click the warning or go to Settings
+- Get API key from [console.anthropic.com](https://console.anthropic.com/)
+- Paste it in the "Claude AI Configuration" section and save
+- **Spotlight requires Claude to understand commands**
+
+**Commands not being understood?**
+- Check that Claude API key is configured in Settings
+- Check browser console (F12) → Service Worker for Claude API errors
+- Verify you have an active internet connection
+- Make sure you're on a regular webpage (not chrome:// pages)
+- Check Claude API usage/quota at console.anthropic.com
+
 **Spotlight panel not appearing?**
 - Make sure you're on a regular webpage (not chrome:// or extension pages)
 - Try refreshing the page after installing the extension
@@ -168,10 +262,10 @@ This extension is designed for:
 - Click "💡 Open Spotlight" in the popup again
 
 **Fish Audio not working?**
+- This is optional - native TTS will be used instead
 - Check that your API key is correctly entered in Settings
 - Verify you have an active internet connection
 - Check the browser console for error messages
-- The extension will automatically fall back to native TTS
 
 **Voice recognition not working?**
 - **First time?** Click "🎤 Start listening" - Chrome will ask for microphone permission
