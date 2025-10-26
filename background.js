@@ -140,7 +140,7 @@ Respond with JSON only.`;
                 type: "image",
                 source: {
                   type: "base64",
-                  media_type: "image/png",
+                  media_type: "image/jpeg",
                   data: base64ImageData,
                 },
               },
@@ -160,14 +160,89 @@ Respond with JSON only.`;
     const data = await response.json();
     const claudeResponse = data.content[0].text;
 
-    // Parse JSON response
-    const jsonMatch = claudeResponse.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("Could not parse Claude response as JSON");
+    // Robust JSON parsing with validation
+    let actionData;
+
+    // First, try parsing the entire response as JSON
+    try {
+      actionData = JSON.parse(claudeResponse);
+    } catch (e) {
+      // Fall back to extracting JSON from code blocks or text
+      const jsonMatch =
+        claudeResponse.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/) ||
+        claudeResponse.match(/\{[\s\S]*\}/);
+
+      if (!jsonMatch) {
+        throw new Error("Could not find valid JSON in Claude response");
+      }
+
+      try {
+        actionData = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+      } catch (parseError) {
+        throw new Error(`Failed to parse JSON: ${parseError.message}`);
+      }
     }
 
-    const actionData = JSON.parse(jsonMatch[0]);
-    console.log("Parsed action:", actionData);
+    // Validate required fields and schema
+    if (!actionData || typeof actionData !== "object") {
+      throw new Error("Invalid response: not a valid object");
+    }
+
+    if (!actionData.action || typeof actionData.action !== "string") {
+      throw new Error("Invalid response: missing or invalid 'action' field");
+    }
+
+    const validActions = [
+      "click",
+      "highlight",
+      "scroll",
+      "goback",
+      "not_found",
+    ];
+    if (!validActions.includes(actionData.action)) {
+      throw new Error(
+        `Invalid response: unknown action '${actionData.action}'`
+      );
+    }
+
+    // Validate coordinate fields if present
+    if (
+      actionData.click_point &&
+      (typeof actionData.click_point !== "object" ||
+        typeof actionData.click_point.x !== "number" ||
+        typeof actionData.click_point.y !== "number" ||
+        actionData.click_point.x < 0 ||
+        actionData.click_point.x > 1 ||
+        actionData.click_point.y < 0 ||
+        actionData.click_point.y > 1)
+    ) {
+      throw new Error(
+        "Invalid response: click_point must have valid x,y coordinates (0-1)"
+      );
+    }
+
+    if (
+      actionData.bbox &&
+      (typeof actionData.bbox !== "object" ||
+        typeof actionData.bbox.x !== "number" ||
+        typeof actionData.bbox.y !== "number" ||
+        typeof actionData.bbox.width !== "number" ||
+        typeof actionData.bbox.height !== "number" ||
+        actionData.bbox.x < 0 ||
+        actionData.bbox.x > 1 ||
+        actionData.bbox.y < 0 ||
+        actionData.bbox.y > 1 ||
+        actionData.bbox.width <= 0 ||
+        actionData.bbox.width > 1 ||
+        actionData.bbox.height <= 0 ||
+        actionData.bbox.height > 1)
+    ) {
+      throw new Error(
+        "Invalid response: bbox must have valid normalized coordinates"
+      );
+    }
+
+    console.log("Parsed and validated action:", actionData);
 
     // Convert Claude's action format to our payload format
     let payload = {
@@ -193,15 +268,54 @@ Respond with JSON only.`;
       actionData.action === "highlight"
     ) {
       payload.action = actionData.action;
-      payload.selector = actionData.selector || null;
-      
-      // Add coordinate-based targeting
-      if (actionData.click_point) {
-        payload.click_point = actionData.click_point;
+
+      // Validate that we have at least one targeting method
+      const hasSelector =
+        actionData.selector &&
+        typeof actionData.selector === "string" &&
+        actionData.selector.trim().length > 0;
+      const hasCoordinates =
+        actionData.click_point &&
+        typeof actionData.click_point === "object" &&
+        typeof actionData.click_point.x === "number" &&
+        typeof actionData.click_point.y === "number";
+
+      if (!hasSelector && !hasCoordinates) {
+        throw new Error(
+          `Invalid response: ${actionData.action} action requires either a valid selector or click_point coordinates`
+        );
       }
-      
-      if (actionData.bbox) {
-        payload.bbox = actionData.bbox;
+
+      // Map targeting fields with safe fallbacks
+      payload.selector = hasSelector ? actionData.selector.trim() : null;
+
+      // Add coordinate-based targeting with validation
+      if (hasCoordinates) {
+        payload.click_point = {
+          x: Math.max(0, Math.min(1, actionData.click_point.x)),
+          y: Math.max(0, Math.min(1, actionData.click_point.y)),
+        };
+      } else {
+        payload.click_point = null;
+      }
+
+      // Add bounding box with validation
+      if (
+        actionData.bbox &&
+        typeof actionData.bbox === "object" &&
+        typeof actionData.bbox.x === "number" &&
+        typeof actionData.bbox.y === "number" &&
+        typeof actionData.bbox.width === "number" &&
+        typeof actionData.bbox.height === "number"
+      ) {
+        payload.bbox = {
+          x: Math.max(0, Math.min(1, actionData.bbox.x)),
+          y: Math.max(0, Math.min(1, actionData.bbox.y)),
+          width: Math.max(0, Math.min(1, actionData.bbox.width)),
+          height: Math.max(0, Math.min(1, actionData.bbox.height)),
+        };
+      } else {
+        payload.bbox = null;
       }
     }
 
@@ -258,19 +372,20 @@ async function handleCommand(text) {
     try {
       // Capture screenshot of the visible tab
       const imageDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
-        format: "png",
+        format: "jpeg",
+        quality: 80,
       });
-      
+
       if (!imageDataUrl) {
         throw new Error("Failed to capture screenshot");
       }
-      
+
       const base64ImageData = imageDataUrl.split(",")[1];
-      
+
       if (!base64ImageData) {
         throw new Error("Failed to extract base64 data from screenshot");
       }
-      
+
       console.log("Screenshot captured, querying Claude...");
       const action = await queryClaudeForAction(text, base64ImageData, tab.url);
 
