@@ -82,27 +82,42 @@ Your job is to:
 1. Analyze the image to understand the full visual layout.
 2. Understand the user's command.
 3. Identify the best element (button, link, input) to interact with to achieve the user's goal.
-4. Use your OCR capabilities to find the EXACT text on that element.
+4. Provide both text selectors AND precise coordinates for the target element.
 
 Return your response as JSON with this structure:
 {
   "reasoning": "Brief explanation of what you see and why you chose this action.",
   "action": "click" | "highlight" | "scroll" | "goback" | "not_found",
-  "selector": "The EXACT text on the element to click/highlight (e.g., 'Log In', 'Search', 'Appointments'). This is critical.",
+  "selector": "The EXACT text on the element (can be null if coordinates are provided)",
+  "click_point": {"x": 0.5, "y": 0.3} | null,
+  "bbox": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.05} | null,
   "direction": "up" | "down" (for scroll),
   "speak": "What to say to the user"
 }
 
+COORDINATE SYSTEM:
+- All coordinates are normalized (0.0 to 1.0) relative to the image dimensions
+- click_point: Center point where user should click (x, y)
+- bbox: Bounding box of the target element (x, y, width, height)
+- x=0 is left edge, x=1 is right edge
+- y=0 is top edge, y=1 is bottom edge
+
 IMPORTANT:
-- Your primary goal is to find the 'selector' text.
-- If the user says "click search," find the element that says "Search" or has a search icon and return that text.
-- If you can't find a relevant element, use action "not_found".
-- For scroll/goback, the 'selector' can be null.`;
+- ALWAYS provide click_point and bbox when you can visually identify a target element
+- Set click_point and bbox to null only for scroll/goback/not_found actions
+- selector can be null if coordinates are reliable, but prefer providing both when possible
+- For elements without clear text (icons, images), rely on coordinates and describe in reasoning`;
 
   const userPrompt = `User Command: "${userCommand}"
 
 Analyze the attached screenshot for the page at URL: ${pageUrl}.
-Based on the user's command, what action should be taken? Respond with JSON only.`;
+Identify the target element and provide:
+1. The action to take
+2. Text selector (if readable text exists)
+3. Precise normalized coordinates (click_point and bbox)
+4. Clear reasoning for your choice
+
+Respond with JSON only.`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -178,7 +193,16 @@ Based on the user's command, what action should be taken? Respond with JSON only
       actionData.action === "highlight"
     ) {
       payload.action = actionData.action;
-      payload.selector = actionData.selector;
+      payload.selector = actionData.selector || null;
+      
+      // Add coordinate-based targeting
+      if (actionData.click_point) {
+        payload.click_point = actionData.click_point;
+      }
+      
+      if (actionData.bbox) {
+        payload.bbox = actionData.bbox;
+      }
     }
 
     return {
