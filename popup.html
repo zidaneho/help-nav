@@ -1,10 +1,85 @@
 <!doctype html>
-<html>
-  <head>
-    <link rel="stylesheet" href="button.css" />
-  </head>
-  <body>
-    <button id="changeColor"></button>
-    <script src="popup.js"></script>
-  </body>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Spotlight</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --fg:#0f172a; --muted:#475569; --brand:#2563eb; --ok:#16a34a; --warn:#ea580c; --bg:#f8fafc; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 14px 14px 12px;
+      width: 320px; background: var(--bg); color: var(--fg);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    h1 { font-size: 16px; margin: 0 0 10px; }
+    .status {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 10px; border-radius: 999px; background: white; border: 1px solid #e2e8f0;
+      font-size: 12px; color: var(--muted);
+    }
+    .dot { width: 10px; height: 10px; border-radius: 999px; background: #94a3b8; }
+    .dot.listening { background: var(--ok); box-shadow: 0 0 0 3px rgba(22,163,74,0.15); }
+    .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+    button {
+      font-size: 15px; font-weight: 600; line-height: 1;
+      padding: 14px 12px; min-height: 44px; border-radius: 12px; border: 1px solid #cbd5e1;
+      background: white; color: var(--fg); cursor: pointer;
+    }
+    button.primary { background: var(--brand); color: white; border-color: var(--brand); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .row { display: flex; gap: 10px; margin-top: 10px; }
+    .full { grid-column: 1 / -1; }
+    .panel {
+      margin-top: 12px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px;
+    }
+    .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    #lastTranscript { font-size: 14px; word-break: break-word; }
+    #hints { font-size: 12px; color: var(--muted); line-height: 1.35; }
+    a { color: var(--brand); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h1>Spotlight</h1>
+
+  <div class="status" aria-live="polite">
+    <span id="statusDot" class="dot" aria-hidden="true"></span>
+    <span id="statusText">Idle</span>
+  </div>
+
+  <div class="controls" role="group" aria-label="Controls">
+    <button id="startBtn" class="primary" aria-label="Start listening" title="Click to allow microphone access">
+      🎤 Start listening
+    </button>
+    <button id="stopBtn" aria-label="Stop listening" disabled>Stop</button>
+    <div id="micHint" style="grid-column: 1 / -1; font-size: 11px; color: #64748b; text-align: center; margin-top: -4px;">
+      💡 First time? Click "Start listening" to allow mic access
+    </div>
+
+    <button id="assistantBtn" class="full" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;" aria-label="Open Assistant">💡 Open Spotlight</button>
+    <button id="repeatBtn" class="full" aria-label="Repeat last instruction">Repeat last step</button>
+  </div>
+
+  <div class="panel" aria-live="polite">
+    <div class="label">Last command heard</div>
+    <div id="lastTranscript">—</div>
+  </div>
+
+  <div class="panel">
+    <div class="label">Try saying</div>
+    <div id="hints">
+      "scroll down" · "click login" · "highlight menu" · "go back"
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="label">Voice Engine</div>
+    <div id="voiceEngine" style="font-size: 13px;">
+      <span id="ttsStatus">Checking...</span>
+      <a href="#" id="settingsLink" style="margin-left: 8px; font-size: 12px;">Settings</a>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
 </html>

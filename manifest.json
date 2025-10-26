@@ -1,12 +1,17 @@
 {
-  "name": "Getting Started Example",
-  "description": "Build an Extension!",
+  "name": "Spotlight",
+  "description": "Voice-guided web navigation assistant for easy browsing",
   "version": "1.0",
   "manifest_version": 3,
   "background": {
     "service_worker": "background.js"
   },
   "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": ["https://api.fish.audio/*"],
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["assistant-panel.js", "cursor-guide.js", "content.js"]
+  }],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
