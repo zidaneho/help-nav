@@ -7,23 +7,29 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <h1 id="">Spotlight</h1>
-
-    <div class="panel">
-      <div class="label">Try saying</div>
-      <div id="hints">
-        "scroll down" · "click login" · "highlight menu" · "go back"
+    <div class="header">
+      <div class="title">
+        <img
+          src="/images/logo.svg"
+          alt="Spotlight"
+          class="logo"
+          id="logo-img"
+        />
+        <span>Spotlight</span>
       </div>
+      <a href="#" id="settingsLink" class="settings-btn" aria-label="Settings"
+        >⚙️</a
+      >
     </div>
 
-    <div class="panel">
-      <div class="label">Voice Engine</div>
-      <div id="voiceEngine">
-        <span id="ttsStatus">Checking...</span>
-        <a href="#" id="settingsLink">Settings</a>
+    <div class="content-body">
+      <div class="panel">
+        <div class="label">Voice Engine</div>
+        <div id="voiceEngine">
+          <span id="ttsStatus">Checking...</span>
+        </div>
       </div>
     </div>
-
     <script src="popup.js"></script>
   </body>
 </html>

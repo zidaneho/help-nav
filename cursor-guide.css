@@ -1,11 +1,15 @@
-/* Large, accessible cursor for elderly users */
+/* --- Original Large Cursor Style --- */
+
+/* 1. Large, accessible cursor */
 .nav-large-cursor {
   cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="%23000" stroke="%23fff" stroke-width="2" d="M2 2 L2 28 L10 20 L14 28 L18 26 L14 18 L24 18 Z"/></svg>')
       0 0,
     auto !important;
 }
 
-/* Animated cursor pointer for guidance */
+/* --- Assistant Guidance Styles (from cursor-guide.js) --- */
+
+/* Animated cursor pointer for guidance (the '👆') */
 .nav-animated-cursor {
   position: fixed;
   width: 40px;
@@ -29,30 +33,6 @@
   }
   50% {
     transform: scale(1.2) translateY(-5px);
-  }
-}
-
-/* Cursor trail effect */
-.nav-cursor-trail {
-  position: fixed;
-  width: 12px;
-  height: 12px;
-  background: radial-gradient(circle, #667eea 0%, transparent 70%);
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 999998;
-  opacity: 0;
-  animation: trailFade 0.6s ease-out forwards;
-}
-
-@keyframes trailFade {
-  0% {
-    opacity: 0.8;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.3);
   }
 }
 
@@ -111,27 +91,6 @@
   }
 }
 
-/* Path visualization - draws a line to the target */
-.nav-path-line {
-  position: fixed;
-  height: 3px;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-  transform-origin: left center;
-  z-index: 999997;
-  pointer-events: none;
-  opacity: 0.7;
-  animation: pathDraw 1s ease-out forwards;
-}
-
-@keyframes pathDraw {
-  from {
-    width: 0;
-  }
-  to {
-    width: 100%;
-  }
-}
-
 /* Pulsing dot on target */
 .nav-target-dot {
   position: absolute;
@@ -142,6 +101,7 @@
   border: 3px solid white;
   box-shadow: 0 0 0 4px rgba(255, 107, 107, 0.3);
   animation: dotPulse 1.5s ease-in-out infinite;
+  z-index: 999998; /* Ensure it's on top */
 }
 
 @keyframes dotPulse {

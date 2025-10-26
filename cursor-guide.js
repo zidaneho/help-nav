@@ -3,7 +3,7 @@
 
 class CursorGuide {
   constructor() {
-    this.customCursor = null;
+    this.customCursor = null; // This is the '👆' for guided steps
     this.isGuiding = false;
     this.targetElement = null;
     this.cursorTrail = [];
@@ -11,11 +11,11 @@ class CursorGuide {
 
   // Initialize cursor guide
   init() {
-    this.createCustomCursor();
+    this.createCustomCursor(); // Creates the '👆' emoji for guidance
     console.log("Cursor Guide initialized");
   }
 
-  // Create animated custom cursor
+  // Create animated custom cursor (FOR GUIDANCE ONLY)
   createCustomCursor() {
     if (this.customCursor) return;
 
@@ -36,6 +36,8 @@ class CursorGuide {
     document.body.classList.remove("nav-large-cursor");
   }
 
+  // --- All functions below this line are for ASSISTANT GUIDANCE ---
+
   // Guide cursor to specific element
   guideTo(element) {
     if (!element) return;
@@ -43,7 +45,7 @@ class CursorGuide {
     this.isGuiding = true;
     this.targetElement = element;
 
-    // Show custom cursor
+    // Show custom guidance cursor
     if (this.customCursor) {
       this.customCursor.style.display = "block";
       this.animateCursorToElement(element);
@@ -133,19 +135,6 @@ class CursorGuide {
     setTimeout(() => dot.remove(), 5000);
   }
 
-  // Create cursor trail effect
-  createCursorTrail(x, y) {
-    const trail = document.createElement("div");
-    trail.className = "nav-cursor-trail";
-    trail.style.left = x + "px";
-    trail.style.top = y + "px";
-
-    document.body.appendChild(trail);
-
-    // Remove after animation
-    setTimeout(() => trail.remove(), 600);
-  }
-
   // Stop guiding
   stopGuiding() {
     this.isGuiding = false;
@@ -164,19 +153,6 @@ class CursorGuide {
     this.targetElement = null;
   }
 
-  // Enable cursor trail effect
-  enableCursorTrail() {
-    document.addEventListener("mousemove", this.handleMouseMove.bind(this));
-  }
-
-  // Handle mouse move for trail
-  handleMouseMove(e) {
-    // Throttle trail creation
-    if (Math.random() > 0.7) {
-      this.createCursorTrail(e.clientX, e.clientY);
-    }
-  }
-
   // Add focus ring to element
   addFocusRing(element) {
     document.querySelectorAll(".nav-focus-ring").forEach((e) => {
@@ -191,3 +167,6 @@ class CursorGuide {
 
 // Create singleton instance
 const cursorGuide = new CursorGuide();
+cursorGuide.init(); // Initialize the guidance cursor
+
+// --- Message listener removed ---
