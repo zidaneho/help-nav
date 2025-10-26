@@ -138,6 +138,99 @@ function getSafeElementText(el) {
   return (innerText || textContent || ariaLabel || placeholder || title).trim();
 }
 
+// Find element by normalized coordinates (0-1 range)
+function findElementByCoordinates(click_point, bbox) {
+  if (!click_point || typeof click_point.x !== 'number' || typeof click_point.y !== 'number') {
+    console.log('findElementByCoordinates: Invalid click_point provided');
+    return null;
+  }
+  
+  // Convert normalized coordinates to pixel coordinates
+  const x = Math.round(click_point.x * window.innerWidth);
+  const y = Math.round(click_point.y * window.innerHeight);
+  
+  console.log('findElementByCoordinates: Converted coordinates:', { x, y });
+  console.log('findElementByCoordinates: Normalized coordinates:', click_point);
+  
+  // Add visual debug marker (temporary)
+  const debugMarker = document.createElement('div');
+  debugMarker.style.position = 'fixed';
+  debugMarker.style.left = x + 'px';
+  debugMarker.style.top = y + 'px';
+  debugMarker.style.width = '10px';
+  debugMarker.style.height = '10px';
+  debugMarker.style.backgroundColor = 'red';
+  debugMarker.style.border = '2px solid white';
+  debugMarker.style.borderRadius = '50%';
+  debugMarker.style.zIndex = '10000';
+  debugMarker.style.pointerEvents = 'none';
+  debugMarker.id = 'claude-debug-marker';
+  
+  // Remove any existing marker
+  const existing = document.getElementById('claude-debug-marker');
+  if (existing) existing.remove();
+  
+  document.body.appendChild(debugMarker);
+  
+  // Remove marker after 5 seconds
+  setTimeout(() => {
+    if (debugMarker.parentNode) {
+      debugMarker.remove();
+    }
+  }, 5000);
+  
+  // Find element at the click point
+  let element = document.elementFromPoint(x, y);
+  
+  if (!element) {
+    console.log('findElementByCoordinates: No element found at coordinates');
+    return null;
+  }
+  
+  // Debug: Log what element was actually found
+  console.log('findElementByCoordinates: Element at coordinates:', {
+    tagName: element.tagName,
+    textContent: element.textContent?.substring(0, 50),
+    className: element.className,
+    id: element.id
+  });
+  
+  // If we have a bounding box, try to find a more specific interactive element within it
+  if (bbox) {
+    const bboxX = Math.round(bbox.x * window.innerWidth);
+    const bboxY = Math.round(bbox.y * window.innerHeight);
+    const bboxWidth = Math.round(bbox.width * window.innerWidth);
+    const bboxHeight = Math.round(bbox.height * window.innerHeight);
+    
+    // Look for interactive elements within the bounding box
+    const interactiveSelectors = 'button, a, input, select, textarea, [role="button"], [tabindex], [onclick]';
+    const candidates = document.querySelectorAll(interactiveSelectors);
+    
+    for (const candidate of candidates) {
+      const rect = candidate.getBoundingClientRect();
+      if (rect.left >= bboxX && rect.top >= bboxY && 
+          rect.right <= bboxX + bboxWidth && rect.bottom <= bboxY + bboxHeight) {
+        console.log('findElementByCoordinates: Found interactive element in bbox:', candidate);
+        return candidate;
+      }
+    }
+  }
+  
+  // If no specific interactive element found, try to find the closest interactive parent
+  let current = element;
+  while (current && current !== document.body) {
+    if (current.tagName && ['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA'].includes(current.tagName) ||
+        current.hasAttribute('onclick') || current.hasAttribute('role') || current.hasAttribute('tabindex')) {
+      console.log('findElementByCoordinates: Found interactive parent:', current);
+      return current;
+    }
+    current = current.parentElement;
+  }
+  
+  console.log('findElementByCoordinates: Using element at coordinates:', element);
+  return element;
+}
+
 // Find element by text or aria-label
 function findElement(keyword) {
   if (!keyword) {
@@ -277,8 +370,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Handle NAV_ACTION commands from background.js
   if (msg.type === "NAV_ACTION") {
     console.log('content.js: Received NAV_ACTION message:', msg);
-    const { action, selector, speak: voice, direction } = msg.payload;
-    console.log('content.js: Action:', action, 'Selector:', selector);
+    const { action, selector, speak: voice, direction, click_point, bbox } = msg.payload;
+    console.log('content.js: Action:', action, 'Selector:', selector, 'Coordinates:', click_point);
     
     if (action === "scroll") {
       window.scrollBy({
@@ -290,25 +383,51 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       window.history.back();
       speak(voice);
     } else if (action === "highlight") {
-      console.log('content.js: Attempting to highlight with selector:', selector);
-      const el = findElement(selector);
+      console.log('content.js: Attempting to highlight - Coordinates:', click_point, 'Selector:', selector);
+      let el = null;
+      
+      // Primary: Use coordinate-based targeting
+      if (click_point) {
+        console.log('content.js: Using coordinates for targeting');
+        el = findElementByCoordinates(click_point, bbox);
+      }
+      
+      // Fallback: Use text selector only if no coordinates provided
+      if (!el && selector) {
+        console.log('content.js: No coordinates, falling back to text selector:', selector);
+        el = findElement(selector);
+      }
+      
       if (el) {
         console.log('content.js: Element found, highlighting:', el);
         highlight(el);
       } else {
-        console.log('content.js: No element found for selector:', selector);
+        console.log('content.js: No element found');
       }
       speak(voice);
     } else if (action === "click") {
-      console.log('content.js: Attempting to find element for click with selector:', selector);
-      const el = findElement(selector);
+      console.log('content.js: Attempting to click - Coordinates:', click_point, 'Selector:', selector);
+      let el = null;
+      
+      // Primary: Use coordinate-based targeting
+      if (click_point) {
+        console.log('content.js: Using coordinates for targeting');
+        el = findElementByCoordinates(click_point, bbox);
+      }
+      
+      // Fallback: Use text selector only if no coordinates provided
+      if (!el && selector) {
+        console.log('content.js: No coordinates, falling back to text selector:', selector);
+        el = findElement(selector);
+      }
+      
       if (el) {
         console.log('content.js: Element found, highlighting:', el);
         highlight(el);
         // Don't auto-click - just show where to click
       } else {
-        console.log('content.js: No element found for selector:', selector);
-        speak('Sorry, I could not find ' + selector + ' on this page.');
+        console.log('content.js: No element found');
+        speak('Sorry, I could not find the target element on this page.');
       }
       speak(voice);
     }
