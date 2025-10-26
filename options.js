@@ -6,6 +6,15 @@ const referenceIdInput = document.getElementById("referenceId");
 const saveBtn = document.getElementById("saveBtn");
 const statusDiv = document.getElementById("status");
 
+// Show status message
+function showStatus(message, type = "info") {
+  if (!statusDiv) return;
+  statusDiv.textContent = message;
+  statusDiv.classList.remove("error", "success");
+  statusDiv.classList.add(type === "error" ? "error" : "success");
+  setTimeout(() => (statusDiv.textContent = ""), 2000);
+}
+
 // Reacts to a button click by marking the selected button and saving
 // the selection
 function handleButtonClick(event) {
@@ -37,11 +46,6 @@ chrome.storage.sync.get(["fishAudioApiKey", "fishAudioReferenceId"], (data) => {
 saveBtn.addEventListener("click", () => {
   const apiKey = apiKeyInput.value.trim();
   const referenceId = referenceIdInput.value.trim();
-
-  if (!apiKey) {
-    showStatus("Please enter an API key", "error");
-    return;
-  }
 
   chrome.storage.sync.set(
     {

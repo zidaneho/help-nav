@@ -74,6 +74,7 @@ class CursorGuide {
     let step = 0;
 
     const animate = () => {
+      if (!this.isGuiding) return;
       step++;
       const progress = step / steps;
       const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
@@ -89,11 +90,11 @@ class CursorGuide {
       this.customCursor.style.top = currentY + "px";
 
       if (step < steps) {
-        requestAnimationFrame(animate);
+        this._animId = requestAnimationFrame(animate);
       }
     };
 
-    animate();
+    this._animId = requestAnimationFrame(animate);
   }
 
   // Add tooltip to element
@@ -138,6 +139,10 @@ class CursorGuide {
   // Stop guiding
   stopGuiding() {
     this.isGuiding = false;
+    if (this._animId) {
+      cancelAnimationFrame(this._animId);
+      this._animId = null;
+    }
 
     if (this.customCursor) {
       this.customCursor.style.display = "none";
@@ -168,5 +173,3 @@ class CursorGuide {
 // Create singleton instance
 const cursorGuide = new CursorGuide();
 cursorGuide.init(); // Initialize the guidance cursor
-
-// --- Message listener removed ---
