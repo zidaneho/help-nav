@@ -298,6 +298,11 @@ This extension is designed for:
 - Only TTS requests are sent to Fish Audio API
 - No browsing data is collected or transmitted
 
+## Credits
+Made by Zidane Ho and Isabel Ku
+
+Special thanks to this research paper - https://arxiv.org/abs/2404.06474
+
 ## License
 
 MIT License - Feel free to modify and distribute
