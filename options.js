@@ -2,7 +2,8 @@ const page = document.getElementById('buttonDiv');
 const selectedClassName = 'current';
 const presetButtonColors = ['#3aa757', '#e8453c', '#f9bb2d', '#4688f1'];
 
-// Fish Audio API configuration
+// API configuration
+const claudeApiKeyInput = document.getElementById('claudeApiKey');
 const apiKeyInput = document.getElementById('apiKey');
 const referenceIdInput = document.getElementById('referenceId');
 const saveBtn = document.getElementById('saveBtn');
@@ -52,8 +53,11 @@ function constructOptions(buttonColors) {
 // Initialize the page by constructing the color options
 constructOptions(presetButtonColors);
 
-// Load saved Fish Audio settings
-chrome.storage.sync.get(['fishAudioApiKey', 'fishAudioReferenceId'], (data) => {
+// Load saved settings
+chrome.storage.local.get(['claudeApiKey', 'fishAudioApiKey', 'fishAudioReferenceId'], (data) => {
+  if (data.claudeApiKey) {
+    claudeApiKeyInput.value = data.claudeApiKey;
+  }
   if (data.fishAudioApiKey) {
     apiKeyInput.value = data.fishAudioApiKey;
   }
@@ -62,23 +66,25 @@ chrome.storage.sync.get(['fishAudioApiKey', 'fishAudioReferenceId'], (data) => {
   }
 });
 
-// Save Fish Audio settings
+// Save settings
 saveBtn.addEventListener('click', () => {
-  const apiKey = apiKeyInput.value.trim();
+  const claudeKey = claudeApiKeyInput.value.trim();
+  const fishKey = apiKeyInput.value.trim();
   const referenceId = referenceIdInput.value.trim();
 
-  if (!apiKey) {
-    showStatus('Please enter an API key', 'error');
+  if (!claudeKey) {
+    showStatus('Please enter a Claude API key (required for intelligent commands)', 'error');
     return;
   }
 
-  chrome.storage.sync.set({
-    fishAudioApiKey: apiKey,
+  chrome.storage.local.set({
+    claudeApiKey: claudeKey,
+    fishAudioApiKey: fishKey,
     fishAudioReferenceId: referenceId
   }, () => {
     showStatus('Settings saved successfully!', 'success');
     // Notify background script to reload settings
-    chrome.runtime.sendMessage({ type: 'RELOAD_FISH_AUDIO_CONFIG' });
+    chrome.runtime.sendMessage({ type: 'RELOAD_CONFIG' });
   });
 });
 

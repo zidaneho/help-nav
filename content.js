@@ -1,13 +1,15 @@
 // content.js
 // Receives actions from background.js and interacts with the DOM
 
+console.log('✅ Spotlight content.js loaded on:', window.location.href);
+
 // Check if Fish Audio is configured
 let useFishAudio = false;
 let ttsRequestId = 0;
 const pendingTTSRequests = new Map();
 
 // Initialize on load - check Fish Audio config
-chrome.storage.sync.get(['fishAudioApiKey'], (data) => {
+chrome.storage.local.get(['fishAudioApiKey'], (data) => {
   useFishAudio = !!data.fishAudioApiKey;
   console.log('Fish Audio TTS:', useFishAudio ? 'enabled' : 'disabled (falling back to native TTS)');
 });
@@ -81,6 +83,61 @@ function speakNative(text) {
   speechSynthesis.speak(u);
 }
 
+// Check if an input field contains sensitive data
+function isSensitiveInput(el) {
+  if (!el || el.tagName !== 'INPUT') return false;
+  
+  const type = (el.type || '').toLowerCase();
+  const name = (el.name || '').toLowerCase();
+  const id = (el.id || '').toLowerCase();
+  const autocomplete = (el.autocomplete || '').toLowerCase();
+  
+  // Sensitive input types
+  const sensitiveTypes = ['password', 'tel', 'email', 'number'];
+  if (sensitiveTypes.includes(type)) return true;
+  
+  // Sensitive field patterns (credit cards, SSN, etc.)
+  const sensitivePatterns = [
+    'password', 'passwd', 'pwd',
+    'ssn', 'social-security',
+    'credit', 'card', 'cvv', 'cvc', 'ccv',
+    'pin', 'security-code',
+    'account', 'routing',
+    'tax-id', 'ein'
+  ];
+  
+  const fieldText = `${name} ${id} ${autocomplete}`.toLowerCase();
+  return sensitivePatterns.some(pattern => fieldText.includes(pattern));
+}
+
+// Check if element is a form control (input, textarea, select)
+function isFormControl(el) {
+  if (!el || !el.tagName) return false;
+  const tagName = el.tagName.toUpperCase();
+  return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT';
+}
+
+// Get safe text from element, avoiding sensitive input values
+function getSafeElementText(el) {
+  if (!el) return '';
+  
+  // For sensitive inputs or any form control, only use non-value attributes
+  if (isSensitiveInput(el) || isFormControl(el)) {
+    const ariaLabel = el.ariaLabel || '';
+    const placeholder = el.placeholder || '';
+    const title = el.title || '';
+    return (ariaLabel || placeholder || title).trim();
+  }
+  
+  // For non-form elements, use text content (never .value)
+  const innerText = el.innerText || '';
+  const textContent = el.textContent || '';
+  const ariaLabel = el.ariaLabel || '';
+  const placeholder = el.placeholder || '';
+  const title = el.title || '';
+  return (innerText || textContent || ariaLabel || placeholder || title).trim();
+}
+
 // Find element by text or aria-label
 function findElement(keyword) {
   if (!keyword) {
@@ -100,7 +157,7 @@ function findElement(keyword) {
   
   // First pass: exact match
   for (const el of elements) {
-    const text = (el.innerText || el.textContent || el.value || el.ariaLabel || el.placeholder || el.title || "").toLowerCase().trim();
+    const text = getSafeElementText(el).toLowerCase();
     if (text === keyword) {
       console.log('findElement: Found exact match:', el);
       return el;
@@ -109,7 +166,7 @@ function findElement(keyword) {
   
   // Second pass: partial match
   for (const el of elements) {
-    const text = (el.innerText || el.textContent || el.value || el.ariaLabel || el.placeholder || el.title || "").toLowerCase().trim();
+    const text = getSafeElementText(el).toLowerCase();
     if (text.includes(keyword)) {
       console.log('findElement: Found partial match:', el, 'text:', text);
       return el;
@@ -149,7 +206,7 @@ function highlight(el) {
   if (cursor) {
     console.log('highlight: Guiding cursor to element');
     cursor.guideTo(el);
-    const elementText = el.innerText || el.value || el.ariaLabel || 'this element';
+    const elementText = getSafeElementText(el) || 'this element';
     cursor.addTooltip(el, `Click: ${elementText.substring(0, 30)}`);
   }
   
@@ -173,14 +230,102 @@ function createStepIndicator(text) {
   setTimeout(() => indicator.remove(), 5000);
 }
 
-// Listen for Fish Audio config reload and TTS responses
-chrome.runtime.onMessage.addListener(async (msg) => {
-  if (msg.type === "RELOAD_FISH_AUDIO_CONFIG") {
-    // Reload config
-    chrome.storage.sync.get(['fishAudioApiKey'], (data) => {
+// Generate simplified DOM snapshot for Claude
+function getDOMSnapshot() {
+  const elements = document.querySelectorAll(
+    "button, a, input, textarea, select, [role=button], [role=link], h1, h2, h3, label"
+  );
+  
+  const snapshot = [];
+  elements.forEach((el, idx) => {
+    // Use safe text extraction that avoids sensitive input values
+    const text = getSafeElementText(el);
+    
+    // Skip empty text or very long text
+    if (text && text.length < 100) {
+      const tag = el.tagName.toLowerCase();
+      const role = el.getAttribute('role') || '';
+      const type = el.getAttribute('type') || '';
+      
+      // For sensitive inputs, add a marker but don't include the value
+      const isSensitive = isSensitiveInput(el);
+      const displayText = isSensitive ? `[${type || 'input'} field]` : text.substring(0, 50);
+      
+      snapshot.push(`[${idx}] <${tag}${role ? ` role="${role}"` : ''}${type ? ` type="${type}"` : ''}> ${displayText}`);
+    }
+  });
+  
+  // Limit to first 100 elements to avoid token limits
+  return snapshot.slice(0, 100).join('\n');
+}
+
+// Unified message listener - handles all messages from background and popup
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  console.log('content.js: Received message type:', msg.type);
+  
+  // Get DOM snapshot for Claude
+  if (msg.type === "GET_DOM_SNAPSHOT") {
+    console.log('content.js: Generating DOM snapshot...');
+    const snapshot = getDOMSnapshot();
+    sendResponse({
+      domSnapshot: snapshot,
+      url: window.location.href
+    });
+    return true; // Keep channel open for async response
+  }
+  
+  // Handle NAV_ACTION commands from background.js
+  if (msg.type === "NAV_ACTION") {
+    console.log('content.js: Received NAV_ACTION message:', msg);
+    const { action, selector, speak: voice, direction } = msg.payload;
+    console.log('content.js: Action:', action, 'Selector:', selector);
+    
+    if (action === "scroll") {
+      window.scrollBy({
+        top: direction === "up" ? -400 : 400,
+        behavior: "smooth",
+      });
+      speak(voice);
+    } else if (action === "goback") {
+      window.history.back();
+      speak(voice);
+    } else if (action === "highlight") {
+      console.log('content.js: Attempting to highlight with selector:', selector);
+      const el = findElement(selector);
+      if (el) {
+        console.log('content.js: Element found, highlighting:', el);
+        highlight(el);
+      } else {
+        console.log('content.js: No element found for selector:', selector);
+      }
+      speak(voice);
+    } else if (action === "click") {
+      console.log('content.js: Attempting to find element for click with selector:', selector);
+      const el = findElement(selector);
+      if (el) {
+        console.log('content.js: Element found, highlighting:', el);
+        highlight(el);
+        // Don't auto-click - just show where to click
+      } else {
+        console.log('content.js: No element found for selector:', selector);
+        speak('Sorry, I could not find ' + selector + ' on this page.');
+      }
+      speak(voice);
+    }
+  }
+  
+  // Reload config
+  if (msg.type === "RELOAD_FISH_AUDIO_CONFIG" || msg.type === "RELOAD_CONFIG") {
+    chrome.storage.local.get(['fishAudioApiKey'], (data) => {
       useFishAudio = !!data.fishAudioApiKey;
       console.log('Fish Audio config reloaded:', useFishAudio ? 'enabled' : 'disabled');
     });
+  }
+  
+  // Speak error message
+  if (msg.type === "SPEAK_ERROR") {
+    console.log('content.js: Speaking error:', msg.message);
+    speak(msg.message);
   }
   
   // Handle TTS audio response from background
@@ -256,46 +401,5 @@ chrome.runtime.onMessage.addListener(async (msg) => {
         assistant.addMessage(`Could not find: ${msg.keyword}. Try being more specific.`);
       }
     }
-  }
-});
-
-// Handle commands from background.js
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type !== "NAV_ACTION") return;
-
-  console.log('content.js: Received NAV_ACTION message:', msg);
-  const { action, selector, speak: voice, direction } = msg.payload;
-  console.log('content.js: Action:', action, 'Selector:', selector);
-  if (action === "scroll") {
-    window.scrollBy({
-      top: direction === "up" ? -400 : 400,
-      behavior: "smooth",
-    });
-    speak(voice);
-  } else if (action === "goback") {
-    window.history.back();
-    speak(voice);
-  } else if (action === "highlight") {
-    console.log('content.js: Attempting to highlight with selector:', selector);
-    const el = findElement(selector);
-    if (el) {
-      console.log('content.js: Element found, highlighting:', el);
-      highlight(el);
-    } else {
-      console.log('content.js: No element found for selector:', selector);
-    }
-    speak(voice);
-  } else if (action === "click") {
-    console.log('content.js: Attempting to find element for click with selector:', selector);
-    const el = findElement(selector);
-    if (el) {
-      console.log('content.js: Element found, highlighting:', el);
-      highlight(el);
-      // Don't auto-click - just show where to click
-    } else {
-      console.log('content.js: No element found for selector:', selector);
-      speak('Sorry, I could not find ' + selector + ' on this page.');
-    }
-    speak(voice);
   }
 });
