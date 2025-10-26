@@ -2,6 +2,8 @@
 // Handles command processing and coordination
 // Note: Speech recognition moved to popup.js (service workers don't support Web Speech API)
 
+console.log("🚀 Background script loaded and initializing...");
+
 let listening = false;
 let lastTranscript = "";
 let lastAction = null;
@@ -9,17 +11,25 @@ let claudeApiKey = null;
 let fishAudioApiKey = null;
 let fishAudioReferenceId = null;
 
+console.log("Background: Initial state set");
+
 // Load config
 chrome.storage.local.get(
   ["claudeApiKey", "fishAudioApiKey", "fishAudioReferenceId"],
   (data) => {
+    console.log("Background: Loading config from storage:", {
+      claudeApiKey: data.claudeApiKey ? `${data.claudeApiKey.substring(0, 10)}...` : 'not found',
+      fishAudioApiKey: data.fishAudioApiKey ? `${data.fishAudioApiKey.substring(0, 10)}...` : 'not found',
+      fishAudioReferenceId: data.fishAudioReferenceId || 'not found'
+    });
+    
     claudeApiKey = data.claudeApiKey || null;
     fishAudioApiKey = data.fishAudioApiKey || null;
     fishAudioReferenceId = data.fishAudioReferenceId || null;
-    console.log("Claude API:", claudeApiKey ? "Configured" : "Not configured");
-    console.log(
-      "Fish Audio:",
-      fishAudioApiKey ? "Configured" : "Not configured"
+    
+    console.log("Background: Config loaded -", 
+      "Claude:", claudeApiKey ? "Configured" : "Not configured",
+      "Fish Audio:", fishAudioApiKey ? "Configured" : "Not configured"
     );
   }
 );
@@ -338,41 +348,95 @@ Respond with JSON only.`;
 
 // Use Claude to understand commands and reason about page actions
 async function handleCommand(text) {
-  console.log("handleCommand: Received command:", text);
+  console.log("=== HANDLECOMMAND START ===");
+  console.log("handleCommand: Received command:", text, "Type:", typeof text, "Length:", text?.length);
+  console.log("handleCommand: Claude API key status:", claudeApiKey ? "Configured" : "Not configured");
+
+  // Validate command text
+  if (!text || typeof text !== 'string' || text.trim().length === 0) {
+    console.error("❌ VALIDATION FAILED: Invalid or empty command text");
+    sendToActiveTab({
+      type: "SPEAK_ERROR",
+      message: "No command received. Please speak clearly and try again.",
+    });
+    console.log("=== HANDLECOMMAND END (validation failed) ===");
+    return;
+  }
+  console.log("✅ Command text validation passed");
 
   if (!claudeApiKey) {
-    console.error("Claude API key not configured");
+    console.error("❌ VALIDATION FAILED: Claude API key not configured");
     sendToActiveTab({
       type: "SPEAK_ERROR",
       message:
         "Please configure your Claude API key in settings to use intelligent commands.",
     });
+    console.log("=== HANDLECOMMAND END (no API key) ===");
     return;
   }
+  console.log("✅ Claude API key validation passed");
+  
+  console.log("Starting tab query to get active tab...");
 
   // First, get the current page DOM context from the active tab
   chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+    console.log("Tab query callback executed, tabs.length:", tabs?.length);
     if (!tabs.length) {
       console.error("No active tab found");
       return;
     }
 
     const tab = tabs[0];
+    console.log("=== TAB VALIDATION START ===");
+    console.log("Background: Active tab info:", {
+      url: tab.url,
+      title: tab.title,
+      id: tab.id,
+      status: tab.status
+    });
+
+    // Check if URL is undefined (permission issue)
+    if (!tab.url) {
+      console.error("❌ TAB URL IS UNDEFINED - Possible permissions issue or page not loaded");
+      console.error("Tab details:", JSON.stringify(tab));
+      sendToActiveTab({
+        type: "SPEAK_ERROR",
+        message:
+          "Cannot access page information. Please reload the extension and try again.",
+      });
+      return;
+    }
 
     // Check if this is a chrome:// or other restricted page
     if (
       tab.url.startsWith("chrome://") ||
       tab.url.startsWith("chrome-extension://") ||
-      tab.url.startsWith("edge://")
+      tab.url.startsWith("edge://") ||
+      tab.url.startsWith("moz-extension://") ||
+      tab.url === "about:blank"
     ) {
-      console.error("Cannot run on chrome:// or restricted pages");
+      console.error("❌ RESTRICTED PAGE DETECTED. URL:", tab.url, "Title:", tab.title);
       sendToActiveTab({
         type: "SPEAK_ERROR",
         message:
-          "Spotlight cannot work on Chrome special pages. Please navigate to a regular website.",
+          `Cannot work on special pages. Current URL: ${tab.url.substring(0, 30)}...`,
       });
       return;
     }
+    
+    // Additional check for valid HTTP/HTTPS URLs
+    if (!tab.url.startsWith("http://") && !tab.url.startsWith("https://")) {
+      console.error("❌ INVALID URL SCHEME. URL:", tab.url);
+      sendToActiveTab({
+        type: "SPEAK_ERROR",
+        message:
+          `Only works on http/https websites. Current URL scheme: ${tab.url?.split(':')[0] || 'unknown'}`,
+      });
+      return;
+    }
+    
+    console.log("✅ TAB VALIDATION PASSED. URL:", tab.url);
+    console.log("=== TAB VALIDATION END ===");
 
     try {
       // Capture screenshot of the visible tab
@@ -397,6 +461,14 @@ async function handleCommand(text) {
       if (action) {
         console.log("Claude reasoned action:", action);
 
+        // Send Claude's reasoning to assistant panel for display
+        sendToActiveTab({
+          type: "CLAUDE_RESPONSE",
+          reasoning: action.reasoning,
+          action: action.payload?.action || "speak",
+          selector: action.payload?.selector || "",
+        });
+
         // If Claude says page isn't relevant, just speak the message
         if (action.speakOnly) {
           console.log("Page not relevant to user goal:", action.reasoning);
@@ -412,6 +484,15 @@ async function handleCommand(text) {
       }
     } catch (error) {
       console.error("Error processing command with Claude:", error);
+      
+      // Show error in assistant panel
+      sendToActiveTab({
+        type: "CLAUDE_RESPONSE",
+        reasoning: `❌ Error: ${error.message || "Failed to process command"}`,
+        action: "error",
+        selector: "",
+      });
+      
       sendToActiveTab({
         type: "SPEAK_ERROR",
         message:
@@ -442,17 +523,26 @@ function sendToActiveTab(message) {
 }
 
 // Popup messages
-chrome.runtime.onMessage.addListener((msg, sender) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "VOICE_COMMAND") {
-    // Handle voice command from popup
+    // Handle voice command from popup or assistant panel
+    console.log("=== VOICE_COMMAND RECEIVED ===");
+    console.log("Background: Received VOICE_COMMAND:", msg.text);
+    console.log("Message object:", JSON.stringify(msg));
     lastTranscript = msg.text;
+    console.log("Calling handleCommand with text:", msg.text);
     handleCommand(msg.text);
+    console.log("handleCommand call completed (async)");
+    // Don't send response for async operations
+    return false;
   }
   if (msg.type === "UPDATE_LISTENING_STATUS") {
     listening = msg.listening;
+    return false;
   }
   if (msg.type === "REPEAT_LAST" && lastAction) {
     sendToActiveTab({ type: "NAV_ACTION", payload: lastAction });
+    return false;
   }
   if (msg.type === "GET_STATUS") {
     // Return current status to popup
@@ -461,20 +551,32 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       listening: listening,
       lastTranscript: lastTranscript,
     });
+    return false;
+  }
+  if (msg.type === "FIND_AND_GUIDE") {
+    // Forward to active tab
+    sendToActiveTab(msg);
+    return false;
   }
   if (msg.type === "RELOAD_FISH_AUDIO_CONFIG" || msg.type === "RELOAD_CONFIG") {
+    console.log("Background: Received RELOAD_CONFIG request");
     // Reload all configs
     chrome.storage.local.get(
       ["claudeApiKey", "fishAudioApiKey", "fishAudioReferenceId"],
       (data) => {
+        console.log("Background: Reloading config from storage:", {
+          claudeApiKey: data.claudeApiKey ? `${data.claudeApiKey.substring(0, 10)}...` : 'not found',
+          fishAudioApiKey: data.fishAudioApiKey ? `${data.fishAudioApiKey.substring(0, 10)}...` : 'not found',
+          fishAudioReferenceId: data.fishAudioReferenceId || 'not found'
+        });
+        
         claudeApiKey = data.claudeApiKey || null;
         fishAudioApiKey = data.fishAudioApiKey || null;
         fishAudioReferenceId = data.fishAudioReferenceId || null;
-        console.log(
-          "Config reloaded - Claude:",
-          claudeApiKey ? "Yes" : "No",
-          "Fish Audio:",
-          fishAudioApiKey ? "Yes" : "No"
+        
+        console.log("Background: Config reloaded -",
+          "Claude:", claudeApiKey ? "Configured" : "Not configured",
+          "Fish Audio:", fishAudioApiKey ? "Configured" : "Not configured"
         );
       }
     );
@@ -488,6 +590,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
         });
       }
     });
+    return false;
   }
 
   // Handle TTS request from content script

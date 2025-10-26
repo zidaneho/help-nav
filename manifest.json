@@ -6,12 +6,19 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["storage", "activeTab", "scripting"],
-  "host_permissions": ["https://api.fish.audio/*", "https://api.anthropic.com/*"],
-  "content_scripts": [{
-    "matches": ["<all_urls>"],
-    "js": ["assistant-panel.js", "cursor-guide.js", "content.js"]
-  }],
+  "permissions": ["storage", "activeTab", "scripting", "tabs"],
+  "host_permissions": [
+    "<all_urls>",
+    "https://api.fish.audio/*",
+    "https://api.anthropic.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["assistant-panel.js", "cursor-guide.js", "content.js"],
+      "css": ["assistant-panel.css", "cursor-guide.css"]
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

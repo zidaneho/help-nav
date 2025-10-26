@@ -14,7 +14,7 @@
 }
 
 #nav-assistant-panel.collapsed .nav-assistant-expanded {
-  display: none;
+  display: none !important;
 }
 
 #nav-assistant-panel.expanded {
@@ -23,10 +23,12 @@
 }
 
 #nav-assistant-panel.expanded .nav-assistant-collapsed {
-  display: none;
+  display: none !important;
 }
 
+/* Ensure proper positioning */
 .nav-assistant-collapsed {
+  position: relative;
   width: auto;
   height: auto;
   background: transparent;
@@ -50,6 +52,7 @@
 }
 
 .nav-assistant-expanded {
+  position: relative;
   background: white;
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
@@ -58,6 +61,95 @@
   width: 100%;
   height: 100%;
   max-height: 600px;
+}
+
+/* Voice Recognition Controls */
+.nav-assistant-controls {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.voice-control-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.voice-toggle-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.voice-toggle-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+}
+
+.voice-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.voice-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #d1d5db;
+  transition: 0.3s;
+  border-radius: 24px;
+}
+
+.voice-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+input:checked + .voice-toggle-slider {
+  background-color: #3b82f6;
+}
+
+input:checked + .voice-toggle-slider:before {
+  transform: translateX(20px);
+}
+
+.voice-status {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.voice-status.listening {
+  color: #ef4444;
+  font-weight: 500;
+}
+
+.voice-status.ready {
+  color: #10b981;
 }
 
 .nav-assistant-header {

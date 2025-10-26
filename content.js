@@ -23,6 +23,8 @@ let assistant = null;
   if (typeof assistantPanel !== "undefined") {
     assistant = assistantPanel;
     assistant.init();
+    // Set visible flag so it shows up when created
+    assistant.isVisible = true;
     console.log("Assistant Panel initialized");
   }
 })();
@@ -41,6 +43,12 @@ let cursor = null;
 // Speak function - requests TTS from background script
 async function speak(text) {
   if (!text) return;
+
+  // Send spoken text to assistant panel for display
+  chrome.runtime.sendMessage({
+    type: "VOICE_SPEAKING",
+    text: text,
+  });
 
   // Try Fish Audio via background script if configured
   if (useFishAudio) {
@@ -169,43 +177,6 @@ function findElementByCoordinates(click_point, bbox) {
   console.log("findElementByCoordinates: Converted coordinates:", { x, y });
   console.log("findElementByCoordinates: Normalized coordinates:", click_point);
 
-  // Add visual debug marker if enabled in settings
-  chrome.storage.local.get(["showDebugMarker"], (data) => {
-    if (data.showDebugMarker) {
-      const debugMarker = document.createElement("div");
-      debugMarker.style.position = "fixed";
-      debugMarker.style.left = x + "px";
-      debugMarker.style.top = y + "px";
-      debugMarker.style.width = "12px";
-      debugMarker.style.height = "12px";
-      debugMarker.style.backgroundColor = "#ff0000";
-      debugMarker.style.border = "2px solid #ffffff";
-      debugMarker.style.borderRadius = "50%";
-      debugMarker.style.zIndex = "10000";
-      debugMarker.style.pointerEvents = "none";
-      debugMarker.style.boxShadow = "0 0 4px rgba(0,0,0,0.5)";
-      debugMarker.id = "claude-debug-marker";
-      debugMarker.title = `Claude Target: (${click_point.x.toFixed(
-        3
-      )}, ${click_point.y.toFixed(3)})`;
-
-      // Remove any existing marker
-      const existing = document.getElementById("claude-debug-marker");
-      if (existing) existing.remove();
-
-      document.body.appendChild(debugMarker);
-
-      console.log("Debug marker displayed at coordinates:", { x, y });
-
-      // Remove marker after 8 seconds
-      setTimeout(() => {
-        if (debugMarker.parentNode) {
-          debugMarker.remove();
-        }
-      }, 8000);
-    }
-  });
-
   // Find element at the click point
   let element = document.elementFromPoint(x, y);
 
@@ -220,6 +191,14 @@ function findElementByCoordinates(click_point, bbox) {
     textContent: element.textContent?.substring(0, 50),
     className: element.className,
     id: element.id,
+  });
+  
+  // Debug: Show coordinate details
+  console.log("findElementByCoordinates: Coordinate analysis:", {
+    normalizedCoords: click_point,
+    pixelCoords: { x, y },
+    viewportSize: { width: window.innerWidth, height: window.innerHeight },
+    scrollPosition: { x: window.scrollX, y: window.scrollY }
   });
 
   // If we have a bounding box, try to find a more specific interactive element within it
@@ -441,13 +420,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       click_point
     );
 
-    function findTargetElement(cllick_point, bbox, selector) {
+    function findTargetElement(click_point, bbox, selector) {
       let el = null;
 
       // Primary: Use coordinate-based targeting
       if (click_point) {
         console.log("content.js: Using coordinates for targeting");
         el = findElementByCoordinates(click_point, bbox);
+        
+        // Validate if coordinate-found element matches intended selector
+        if (el && selector) {
+          const elementText = getSafeElementText(el).toLowerCase();
+          const selectorLower = selector.toLowerCase();
+          const isMatch = elementText.includes(selectorLower) || selectorLower.includes(elementText);
+          
+          console.log("content.js: Coordinate vs Selector validation:", {
+            foundElementText: elementText,
+            intendedSelector: selector,
+            isMatch: isMatch
+          });
+          
+          // If coordinate element doesn't match selector, try text search as backup
+          if (!isMatch) {
+            console.log("content.js: Coordinate mismatch! Trying text selector as backup");
+            const textEl = findElement(selector);
+            if (textEl) {
+              console.log("content.js: Text selector found better match, using that instead");
+              return textEl;
+            }
+          }
+        }
+        
         if (el) return el;
       }
 

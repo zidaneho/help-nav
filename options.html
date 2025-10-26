@@ -6,43 +6,58 @@
   </head>
   <body>
     <h1>Spotlight Settings</h1>
-    
+
     <div class="section">
-      <h2>🧠 Claude AI Configuration (Required)</h2>
+      <h2>Claude AI Configuration (Required)</h2>
       <label for="claudeApiKey">Claude API Key</label>
-      <input type="password" id="claudeApiKey" placeholder="Enter your Anthropic Claude API key" />
-      <p class="info">Get your API key from <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer">console.anthropic.com</a></p>
-      <p class="info"><strong>Required for intelligent command understanding</strong> - Spotlight uses Claude to understand complex commands like "I want to make an appointment"</p>
+      <input
+        type="password"
+        id="claudeApiKey"
+        placeholder="Enter your Anthropic Claude API key"
+      />
+      <p class="info">
+        Get your API key from
+        <a
+          href="https://console.anthropic.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          >console.anthropic.com</a
+        >
+      </p>
+      <p class="info">
+        <strong>Required for intelligent command understanding</strong> -
+        Spotlight uses Claude to understand complex commands like "I want to
+        make an appointment"
+      </p>
     </div>
 
     <div class="section">
-       <h2>🐟 Fish Audio TTS (Optional)</h2>
+      <h2>Fish Audio TTS (Optional)</h2>
       <label for="apiKey">Fish Audio API Key</label>
-      <input type="password" id="apiKey" placeholder="Enter your Fish Audio API key" />
-      <p class="info">Get your API key from <a href="https://fish.audio" target="_blank" rel="noopener noreferrer">fish.audio</a></p>
-      
+      <input
+        type="password"
+        id="apiKey"
+        placeholder="Enter your Fish Audio API key"
+      />
+      <p class="info">
+        Get your API key from
+        <a href="https://fish.audio" target="_blank" rel="noopener noreferrer"
+          >fish.audio</a
+        >
+      </p>
+
       <label for="referenceId">Reference ID (Optional)</label>
-      <input type="text" id="referenceId" placeholder="Enter voice model reference ID" />
-      <p class="info">Leave empty to use the default voice model or browser's native TTS</p>
+      <input
+        type="text"
+        id="referenceId"
+        placeholder="Enter voice model reference ID"
+      />
+      <p class="info">
+        Leave empty to use the default voice model or browser's native TTS
+      </p>
 
       <button id="saveBtn">Save Settings</button>
       <div id="status" class="status"></div>
-    </div>
-
-    <div class="section">
-      <h2>🔧 Debug Settings</h2>
-      <label class="checkbox-label">
-        <input type="checkbox" id="showDebugMarker" />
-        <span>Show Debug Marker</span>
-      </label>
-      <p class="info">When enabled, displays a red dot on the page showing exactly where Claude's AI vision system is targeting. This helps debug coordinate accuracy and understand why certain elements are being selected.</p>
-      <p class="info"><strong>Recommended:</strong> Enable this while testing to see Claude's targeting precision, disable for normal use.</p>
-    </div>
-
-    <div class="section">
-      <h2>Theme Color</h2>
-      <p>Choose a different background color!</p>
-      <div id="buttonDiv"></div>
     </div>
 
     <script src="options.js"></script>

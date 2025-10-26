@@ -35,6 +35,10 @@ class AssistantPanel {
     // Append empty shell first so expand/collapse works immediately
     document.body.appendChild(panel);
     this.panel = panel;
+    
+    // Ensure panel is visible
+    panel.style.display = "block";
+    console.log("Assistant panel created and added to DOM");
 
     // Load HTML template and then attach listeners
     const url = chrome.runtime.getURL("assistant-panel.html");
@@ -46,6 +50,7 @@ class AssistantPanel {
           chrome.runtime.getURL("/images/logo.svg")
         );
         this.attachEventListeners();
+        console.log("Assistant panel HTML loaded and listeners attached");
       })
       .catch((err) => {
         console.error("Failed to load assistant panel template:", err);
@@ -114,10 +119,14 @@ class AssistantPanel {
     }`;
 
     const avatar = isUser ? "👤" : "🤖";
+    
+    // Convert newlines to <br> for proper display
+    const formattedText = text.replace(/\n/g, '<br>');
+    
     messageDiv.innerHTML = `
       <div class="nav-assistant-avatar">${avatar}</div>
       <div class="nav-assistant-content">
-        <p>${text}</p>
+        <p>${formattedText}</p>
       </div>
     `;
 
@@ -150,6 +159,12 @@ class AssistantPanel {
       input.addEventListener("keypress", (e) => {
         if (e.key === "Enter") this.handleSend();
       });
+    }
+
+    // Voice recognition toggle
+    const voiceToggle = document.getElementById("voice-recognition-toggle");
+    if (voiceToggle) {
+      voiceToggle.addEventListener("change", (e) => this.toggleVoiceRecognition(e.target.checked));
     }
 
     // Make panel draggable
@@ -202,10 +217,14 @@ class AssistantPanel {
 
     setTimeout(() => {
       // Send message to content script to find and highlight element
-      chrome.runtime.sendMessage({
-        type: "FIND_AND_GUIDE",
-        keyword: keyword,
-      });
+      try {
+        chrome.runtime.sendMessage({
+          type: "FIND_AND_GUIDE",
+          keyword: keyword,
+        });
+      } catch (error) {
+        console.error("Failed to send FIND_AND_GUIDE message:", error);
+      }
     }, 500);
   }
 
@@ -316,43 +335,163 @@ class AssistantPanel {
     }
 
     this.recognition = new webkitSpeechRecognition();
-    this.recognition.continuous = true;
+    this.recognition.continuous = false; // Changed from true - process each utterance immediately
     this.recognition.interimResults = false;
     this.recognition.lang = "en-US";
+    this.recognition.maxAlternatives = 1;
 
     this.recognition.onresult = (event) => {
       const transcript =
         event.results[event.results.length - 1][0].transcript.trim();
+      console.log("Speech recognition result:", transcript, "Length:", transcript.length);
+      
+      // Don't process empty transcripts
+      if (!transcript || transcript.length === 0) {
+        console.log("Empty transcript, ignoring");
+        return;
+      }
+      
       if (!this.isExpanded) this.expand();
       this.addMessage(transcript, true);
-      chrome.runtime.sendMessage({ type: "VOICE_COMMAND", text: transcript });
+      
+      // Send message with error handling
+      try {
+        console.log("Sending voice command to background:", transcript);
+        chrome.runtime.sendMessage({ type: "VOICE_COMMAND", text: transcript });
+        // Note: We don't wait for a response since handleCommand is async
+        // and doesn't send a response immediately
+      } catch (error) {
+        console.error("Failed to send voice command:", error);
+        this.addMessage("Extension connection lost. Please refresh the page.", false);
+      }
     };
 
     this.recognition.onstart = () => {
       this.isListening = true;
+      this.updateVoiceStatus("Listening...");
+      console.log("Speech recognition started, isListening:", this.isListening);
     };
 
     this.recognition.onend = () => {
-      if (this.isListening) {
+      console.log("Speech recognition ended, isListening:", this.isListening);
+      const toggle = document.getElementById("voice-recognition-toggle");
+      
+      // Restart immediately if toggle is still on (since we're no longer in continuous mode)
+      if (this.isListening && toggle && toggle.checked) {
+        console.log("Auto-restarting speech recognition immediately");
+        // Small delay to prevent restart issues
         setTimeout(() => {
           try {
-            this.recognition.start();
+            if (this.isListening && toggle.checked) {
+              this.recognition.start();
+              console.log("Speech recognition restarted, ready for next command");
+            }
           } catch (e) {
-            this.isListening = false;
+            console.error("Failed to restart speech recognition:", e);
+            // Try again after a longer delay
+            setTimeout(() => {
+              try {
+                if (this.isListening && toggle.checked) {
+                  this.recognition.start();
+                }
+              } catch (err) {
+                console.error("Failed to restart after retry:", err);
+                this.isListening = false;
+                this.updateVoiceStatus("Error");
+                if (toggle) toggle.checked = false;
+              }
+            }, 500);
           }
-        }, 100);
+        }, 100); // Quick restart for next command
+      } else {
+        this.isListening = false;
+        this.updateVoiceStatus("Ready");
+        console.log("Speech recognition stopped (toggle off or not listening)");
       }
     };
 
     this.recognition.onerror = (e) => {
-      if (e.error !== "no-speech") this.isListening = false;
+      console.log("Speech recognition error:", e.error);
+      
+      // Only stop listening for serious errors, not transient ones
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        this.isListening = false;
+        this.updateVoiceStatus("Permission denied");
+        const toggle = document.getElementById("voice-recognition-toggle");
+        if (toggle) toggle.checked = false;
+      } else if (e.error === "network") {
+        this.updateVoiceStatus("Network error");
+      } else {
+        // For other errors like "no-speech", "audio-capture", keep listening
+        console.log("Transient error, continuing to listen:", e.error);
+      }
     };
+
+    // Don't start automatically - wait for user toggle
+    console.log("Speech recognition initialized (not started)");
+  }
+
+  // Toggle voice recognition on/off
+  toggleVoiceRecognition(enabled) {
+    if (!this.recognition) {
+      this.initSpeechRecognition();
+      if (!this.recognition) {
+        this.updateVoiceStatus("Not supported");
+        return;
+      }
+    }
+
+    if (enabled) {
+      this.startVoiceRecognition();
+    } else {
+      this.stopVoiceRecognition();
+    }
+  }
+
+  // Start voice recognition
+  startVoiceRecognition() {
+    if (!this.recognition || this.isListening) return;
 
     try {
       this.recognition.start();
       this.isListening = true;
+      this.updateVoiceStatus("Listening...");
+      console.log("Voice recognition started");
     } catch (e) {
       console.log("Could not start speech recognition:", e);
+      this.updateVoiceStatus("Error starting");
+      // Reset toggle if failed
+      const toggle = document.getElementById("voice-recognition-toggle");
+      if (toggle) toggle.checked = false;
+    }
+  }
+
+  // Stop voice recognition
+  stopVoiceRecognition() {
+    if (!this.recognition || !this.isListening) return;
+
+    try {
+      this.recognition.stop();
+      this.isListening = false;
+      this.updateVoiceStatus("Ready");
+      console.log("Voice recognition stopped");
+    } catch (e) {
+      console.log("Error stopping speech recognition:", e);
+    }
+  }
+
+  // Update voice status display
+  updateVoiceStatus(status) {
+    const statusEl = document.getElementById("voice-status");
+    if (statusEl) {
+      statusEl.textContent = status;
+      statusEl.className = "voice-status";
+      
+      if (status === "Listening...") {
+        statusEl.classList.add("listening");
+      } else if (status === "Ready") {
+        statusEl.classList.add("ready");
+      }
     }
   }
 }
@@ -360,10 +499,25 @@ class AssistantPanel {
 // Create singleton instance
 const assistantPanel = new AssistantPanel();
 
-// Listen for the "Open Spotlight" button from the popup
+// Listen for messages from background and content scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "TOGGLE_ASSISTANT") {
     // This will show/hide the panel and call init() the first time
     assistantPanel.toggle();
+  }
+  
+  if (message.type === "CLAUDE_RESPONSE") {
+    // Display Claude's reasoning in the assistant panel
+    if (assistantPanel && message.reasoning) {
+      // Just show Claude's reasoning without action/target details
+      assistantPanel.addMessage(message.reasoning, false);
+    }
+  }
+  
+  if (message.type === "VOICE_SPEAKING") {
+    // Display exactly what the voice is saying
+    if (assistantPanel && message.text) {
+      assistantPanel.addMessage(`🔊 "${message.text}"`, false);
+    }
   }
 });
