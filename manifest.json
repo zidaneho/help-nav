@@ -11,7 +11,8 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["assistant-panel.js", "cursor-guide.js", "content.js"]
+      "js": ["assistant-panel.js", "cursor-guide.js", "content.js"],
+      "css": ["assistant-panel.css", "cursor-guide.css"]
     }
   ],
   "action": {
@@ -29,5 +30,12 @@
     "48": "/images/logo48.png",
     "128": "/images/logo128.png"
   },
-  "options_page": "options.html"
+  "options_page": "options.html",
+
+  "web_accessible_resources": [
+    {
+      "resources": ["images/logo.svg", "assistant-panel.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
