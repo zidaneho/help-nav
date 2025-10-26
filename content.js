@@ -110,15 +110,32 @@ function isSensitiveInput(el) {
   return sensitivePatterns.some(pattern => fieldText.includes(pattern));
 }
 
+// Check if element is a form control (input, textarea, select)
+function isFormControl(el) {
+  if (!el || !el.tagName) return false;
+  const tagName = el.tagName.toUpperCase();
+  return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT';
+}
+
 // Get safe text from element, avoiding sensitive input values
 function getSafeElementText(el) {
-  // For sensitive inputs, only use non-value attributes
-  if (isSensitiveInput(el)) {
-    return (el.ariaLabel || el.placeholder || el.title || '').trim();
+  if (!el) return '';
+  
+  // For sensitive inputs or any form control, only use non-value attributes
+  if (isSensitiveInput(el) || isFormControl(el)) {
+    const ariaLabel = el.ariaLabel || '';
+    const placeholder = el.placeholder || '';
+    const title = el.title || '';
+    return (ariaLabel || placeholder || title).trim();
   }
   
-  // For non-sensitive elements, include value
-  return (el.innerText || el.textContent || el.value || el.ariaLabel || el.placeholder || el.title || '').trim();
+  // For non-form elements, use text content (never .value)
+  const innerText = el.innerText || '';
+  const textContent = el.textContent || '';
+  const ariaLabel = el.ariaLabel || '';
+  const placeholder = el.placeholder || '';
+  const title = el.title || '';
+  return (innerText || textContent || ariaLabel || placeholder || title).trim();
 }
 
 // Find element by text or aria-label

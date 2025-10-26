@@ -222,16 +222,63 @@ if (localStorage.getItem("micPermissionGranted") === "true") {
   }
 }
 
+// Function to open options page (used by statusText CTA)
+function openOptionsPage() {
+  chrome.runtime.openOptionsPage();
+}
+
 // Check configuration
 chrome.storage.local.get(["claudeApiKey", "fishAudioApiKey"], (data) => {
   // Check Claude (required for intelligent commands)
   if (!data.claudeApiKey) {
+    // Disable Start and Assistant buttons
+    startBtn.disabled = true;
+    startBtn.setAttribute("aria-disabled", "true");
+    startBtn.style.cursor = "not-allowed";
+    startBtn.style.opacity = "0.5";
+    
+    assistantBtn.disabled = true;
+    assistantBtn.setAttribute("aria-disabled", "true");
+    assistantBtn.style.cursor = "not-allowed";
+    assistantBtn.style.opacity = "0.5";
+    
+    // Set up accessible CTA on statusText
     statusText.textContent = "⚠️ Configure Claude API";
     statusText.style.color = "#ea580c";
     statusText.style.cursor = "pointer";
-    statusText.addEventListener("click", () => {
-      chrome.runtime.openOptionsPage();
-    });
+    statusText.setAttribute("tabindex", "0");
+    statusText.setAttribute("role", "button");
+    statusText.setAttribute("aria-label", "Configure Claude API key in settings");
+    
+    // Remove any existing listeners and add single click handler
+    statusText.onclick = openOptionsPage;
+    
+    // Add keyboard accessibility
+    statusText.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openOptionsPage();
+      }
+    };
+  } else {
+    // Re-enable buttons if API key is present
+    startBtn.disabled = false;
+    startBtn.removeAttribute("aria-disabled");
+    startBtn.style.cursor = "";
+    startBtn.style.opacity = "";
+    
+    assistantBtn.disabled = false;
+    assistantBtn.removeAttribute("aria-disabled");
+    assistantBtn.style.cursor = "";
+    assistantBtn.style.opacity = "";
+    
+    // Reset statusText
+    statusText.style.cursor = "";
+    statusText.removeAttribute("tabindex");
+    statusText.removeAttribute("role");
+    statusText.removeAttribute("aria-label");
+    statusText.onclick = null;
+    statusText.onkeydown = null;
   }
   
   // Check Fish Audio (optional for TTS)
