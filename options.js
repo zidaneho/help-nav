@@ -6,6 +6,7 @@ const presetButtonColors = ['#3aa757', '#e8453c', '#f9bb2d', '#4688f1'];
 const claudeApiKeyInput = document.getElementById('claudeApiKey');
 const apiKeyInput = document.getElementById('apiKey');
 const referenceIdInput = document.getElementById('referenceId');
+const showDebugMarkerInput = document.getElementById('showDebugMarker');
 const saveBtn = document.getElementById('saveBtn');
 const statusDiv = document.getElementById('status');
 
@@ -54,7 +55,7 @@ function constructOptions(buttonColors) {
 constructOptions(presetButtonColors);
 
 // Load saved settings
-chrome.storage.local.get(['claudeApiKey', 'fishAudioApiKey', 'fishAudioReferenceId'], (data) => {
+chrome.storage.local.get(['claudeApiKey', 'fishAudioApiKey', 'fishAudioReferenceId', 'showDebugMarker'], (data) => {
   if (data.claudeApiKey) {
     claudeApiKeyInput.value = data.claudeApiKey;
   }
@@ -64,6 +65,8 @@ chrome.storage.local.get(['claudeApiKey', 'fishAudioApiKey', 'fishAudioReference
   if (data.fishAudioReferenceId) {
     referenceIdInput.value = data.fishAudioReferenceId;
   }
+  // Default to false if not set
+  showDebugMarkerInput.checked = data.showDebugMarker || false;
 });
 
 // Save settings
@@ -71,6 +74,7 @@ saveBtn.addEventListener('click', () => {
   const claudeKey = claudeApiKeyInput.value.trim();
   const fishKey = apiKeyInput.value.trim();
   const referenceId = referenceIdInput.value.trim();
+  const showDebugMarker = showDebugMarkerInput.checked;
 
   if (!claudeKey) {
     showStatus('Please enter a Claude API key (required for intelligent commands)', 'error');
@@ -80,7 +84,8 @@ saveBtn.addEventListener('click', () => {
   chrome.storage.local.set({
     claudeApiKey: claudeKey,
     fishAudioApiKey: fishKey,
-    fishAudioReferenceId: referenceId
+    fishAudioReferenceId: referenceId,
+    showDebugMarker: showDebugMarker
   }, () => {
     showStatus('Settings saved successfully!', 'success');
     // Notify background script to reload settings

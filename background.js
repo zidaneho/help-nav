@@ -304,10 +304,7 @@ Respond with JSON only.`;
 
       // Add coordinate-based targeting with validation
       if (hasCoordinates) {
-        payload.click_point = {
-          x: Math.max(0, Math.min(1, actionData.click_point.x)),
-          y: Math.max(0, Math.min(1, actionData.click_point.y)),
-        };
+        payload.click_point = actionData.click_point;
       } else {
         payload.click_point = null;
       }
@@ -321,12 +318,7 @@ Respond with JSON only.`;
         typeof actionData.bbox.width === "number" &&
         typeof actionData.bbox.height === "number"
       ) {
-        payload.bbox = {
-          x: Math.max(0, Math.min(1, actionData.bbox.x)),
-          y: Math.max(0, Math.min(1, actionData.bbox.y)),
-          width: Math.max(0, Math.min(1, actionData.bbox.width)),
-          height: Math.max(0, Math.min(1, actionData.bbox.height)),
-        };
+        payload.bbox = actionData.bbox;
       } else {
         payload.bbox = null;
       }
