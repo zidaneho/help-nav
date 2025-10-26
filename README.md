@@ -1,17 +1,17 @@
-# Voice Navigator - Fish Audio TTS
+# Spotlight
 
-A Chrome extension that helps elderly users navigate websites using voice commands, visual highlights, and an interactive assistant for easier, independent browsing. Features premium text-to-speech powered by Fish Audio API, enhanced cursor guidance, and a chatbox interface.
+A voice-guided web navigation assistant that helps users browse websites using voice commands and visual guidance. Spotlight highlights exactly where to click, making web navigation intuitive and accessible for everyone, especially elderly users and those with cognitive or visual challenges.
 
 ## Features
 
 ### Core Features
 - 🎤 **Voice Commands**: Navigate websites hands-free with natural voice commands
-- 🐟 **Fish Audio TTS**: High-quality, natural-sounding text-to-speech responses
-- 🧭 **Assistant Panel**: Interactive chatbox for text-based guidance and help
+- 💡 **Spotlight Panel**: Interactive assistant that minimizes to stay out of your way
+- 🎯 **Smart Highlighting**: Multi-layer visual feedback (arrows, pulsing dots, tooltips, animated cursor)
+- 👆 **Show, Don't Do**: Highlights where to click instead of auto-clicking, maintaining user control
+- 🐟 **Fish Audio TTS**: Optional premium text-to-speech (auto-falls back to native browser TTS)
 - 🖱️ **Enhanced Cursor**: Large, accessible cursor with animated guidance
-- 🎯 **Smart Highlighting**: Multi-layer visual feedback (arrows, pulsing dots, tooltips)
 - 📍 **Step Indicators**: Clear on-screen instructions for each action
-- 🔄 **Automatic Fallback**: Uses native browser TTS if Fish Audio is not configured
 - ♿ **Accessibility First**: Designed specifically for elderly and cognitive load-sensitive users
 
 ### Visual Enhancements
@@ -29,36 +29,31 @@ A Chrome extension that helps elderly users navigate websites using voice comman
 
 - **"scroll down"** - Scroll the page down
 - **"scroll up"** - Scroll the page up
-- **"click [element]"** - Click on an element (e.g., "click login", "click search")
-- **"highlight [element]"** - Highlight an element without clicking
+- **"click [element]"** - Show where to click (e.g., "click login", "click search")
+- **"highlight [element]"** - Highlight an element with visual guides
 - **"go back"** - Navigate back to the previous page
 - **"repeat"** - Repeat the last action
 
-### Assistant Panel / Chatbox
+### Spotlight Panel
 
-The assistant panel provides a friendly chat interface for guidance:
+The Spotlight panel provides a friendly chat interface for guidance:
 
-1. **Open the Assistant**: Click the "🧭 Open Assistant Panel" button in the extension popup
-2. **Ask Questions**: Type questions like "How do I login?" or "Find the search button"
-3. **Get Guidance**: The assistant will find elements and visually guide you to them
-4. **Interactive Help**: Click "Help Guide" for a list of available commands
+1. **Open Spotlight**: Click the "💡 Open Spotlight" button in the extension popup
+2. **Auto-Minimizes**: The panel starts minimized at the bottom-right and automatically minimizes when searching
+3. **Ask Questions**: Type questions like "How do I login?" or "Find the search button"
+4. **Get Visual Guidance**: Spotlight finds elements and highlights them with multiple visual cues
+5. **Interactive Help**: Click "Help Guide" for a list of available commands
 
-**Assistant Panel Features**:
+**Spotlight Panel Features**:
 - **Draggable**: Click and drag the header to move the panel anywhere on screen
-- **Minimizable**: Click the "−" button to minimize when not in use
+- **Auto-Minimize**: Minimizes during searches so you can see the highlighted elements
+- **Black Text**: All text is in high-contrast black for better readability
 - **Chat History**: All your questions and responses are saved during your session
-- **Visual Feedback**: The assistant coordinates with all visual guides (arrows, highlights, cursors)
+- **Visual Feedback**: Coordinates with all visual guides (arrows, highlights, animated cursors)
 
 ## Setup Instructions
 
-### 1. Get a Fish Audio API Key
-
-1. Visit [fish.audio](https://fish.audio)
-2. Sign up for an account
-3. Navigate to your API settings
-4. Generate a new API key
-
-### 2. Install the Extension
+### 1. Install the Extension
 
 1. Open Chrome and navigate to `chrome://extensions/`
 2. Enable "Developer mode" in the top-right corner
@@ -66,54 +61,60 @@ The assistant panel provides a friendly chat interface for guidance:
 4. Select the `help-nav` directory
 5. The extension will now be installed
 
-### 3. Configure Fish Audio
-
-1. Click the extension icon in your browser toolbar
-2. Click "Settings" in the popup
-3. Enter your Fish Audio API key
-4. (Optional) Enter a Reference ID for a specific voice model
-5. Click "Save Settings"
-
-### 4. Start Using
+### 2. Start Using
 
 1. Click the extension icon
-2. Click "Start listening"
-3. Say a voice command
-4. The extension will respond with voice feedback and perform the action
+2. Click "🎤 Start listening" (allow microphone access when prompted)
+3. Say a voice command (e.g., "click search")
+4. Spotlight highlights where to click - you perform the action yourself!
+
+### 3. Configure Fish Audio (Optional)
+
+For premium TTS voices:
+
+1. Visit [fish.audio](https://fish.audio) and get an API key
+2. Click the extension icon → "Settings"
+3. Enter your Fish Audio API key
+4. (Optional) Enter a Reference ID for a specific voice
+5. Click "Save Settings"
+
+Note: Without Fish Audio, Spotlight uses your browser's native text-to-speech.
 
 ## Technical Details
 
 ### File Structure
 
 - `manifest.json` - Extension configuration and permissions
-- `background.js` - Speech recognition and command processing
-- `content.js` - DOM interaction, command execution, and coordination
-- `fish-audio.js` - Fish Audio API integration for premium TTS
-- `assistant-panel.js` - Interactive chatbox and guidance system
+- `background.js` - Command processing and Fish Audio TTS (avoids CORS)
+- `content.js` - DOM interaction, element finding, and visual coordination
+- `assistant-panel.js` - Spotlight panel (chat interface and guidance system)
 - `cursor-guide.js` - Enhanced cursor and visual guidance features
-- `popup.html/js` - Extension popup interface with controls
-- `options.html/js` - Settings page for API configuration
+- `popup.html/js` - Extension popup interface with voice controls
+- `options.html/js` - Settings page for Fish Audio API configuration
 
 ### Architecture
 
-The extension uses a multi-layered approach for maximum accessibility:
+Spotlight uses a multi-layered approach for maximum accessibility:
 
-1. **Background Layer** (background.js): Handles voice recognition and command parsing
-2. **Content Layer** (content.js): Coordinates all visual elements and actions
+1. **Background Layer** (background.js): Handles command parsing and Fish Audio TTS API calls
+2. **Content Layer** (content.js): Coordinates all visual elements and finds target elements
 3. **Visual Modules**:
-   - `assistant-panel.js`: Provides chat interface and conversational guidance
+   - `assistant-panel.js`: Provides Spotlight panel (chat interface and conversational guidance)
    - `cursor-guide.js`: Manages cursor enhancements and visual pointers
-   - `fish-audio.js`: Handles audio feedback
-4. **User Interface**: Popup for quick controls, Options page for configuration
+4. **User Interface**: Popup for voice controls, Options page for Fish Audio configuration
 
-### Fish Audio Integration
+**Key Design Choice**: Spotlight highlights elements instead of auto-clicking them. This maintains user control and helps users learn where elements are located.
 
-The extension uses Fish Audio's TTS API to provide high-quality voice responses. Key features:
+### Fish Audio Integration (Optional)
 
+Spotlight supports Fish Audio's premium TTS API for high-quality voice responses:
+
+- **CORS Solution**: API calls made from background script to avoid browser restrictions
 - **API Endpoint**: `https://api.fish.audio/v1/tts`
-- **Format**: MP3 audio
-- **Fallback**: Automatically uses browser's native TTS if Fish Audio fails
+- **Format**: MP3 audio (converted to base64 for message passing)
+- **Automatic Fallback**: Uses browser's native TTS if Fish Audio unavailable or fails
 - **Configuration**: API key stored securely in Chrome's sync storage
+- **Privacy**: Only TTS requests sent to Fish Audio, no browsing data transmitted
 
 ### Permissions
 
@@ -160,11 +161,11 @@ This extension is designed for:
 
 ## Troubleshooting
 
-**Assistant Panel not appearing?**
+**Spotlight panel not appearing?**
 - Make sure you're on a regular webpage (not chrome:// or extension pages)
 - Try refreshing the page after installing the extension
-- Check browser console for any error messages
-- Click "Open Assistant Panel" in the popup again
+- Check browser console (F12) for any error messages
+- Click "💡 Open Spotlight" in the popup again
 
 **Fish Audio not working?**
 - Check that your API key is correctly entered in Settings
@@ -173,21 +174,24 @@ This extension is designed for:
 - The extension will automatically fall back to native TTS
 
 **Voice recognition not working?**
-- Ensure you've granted microphone permissions
+- **First time?** Click "🎤 Start listening" - Chrome will ask for microphone permission
+- Look for the microphone icon in Chrome's address bar and click "Allow"
 - Check your system microphone settings
 - Try speaking more clearly or closer to the microphone
 - Check if another app is using the microphone
+- Keep the popup open while using voice commands
 
 **Visual guides not appearing?**
 - Refresh the page to reload all content scripts
 - Check if the page has security policies blocking scripts
 - Try on a different website to verify the extension works
 
-**Commands not executing?**
-- Make sure you're on a webpage (not chrome:// pages)
-- Try refreshing the page
-- Check that the element you're trying to interact with exists
+**Commands not highlighting elements?**
+- Check browser console (F12) for debug logs showing what was found
+- Make sure you're on a regular webpage (not chrome:// pages)
+- Try using the exact text on the button (e.g., "click Google Search")
 - The element must be visible on the page
+- Try: "click search", "click login", "click sign in" on common sites
 
 **Cursor appears too large/small?**
 - This can be adjusted in future updates
