@@ -76,46 +76,48 @@ async function generateFishAudioTTS(text) {
 }
 
 // Query Claude API for action reasoning
-async function queryClaudeForAction(userCommand, domSnapshot, pageUrl) {
-  const systemPrompt = `You are an intelligent web navigation assistant. You help users navigate websites by identifying the correct elements to interact with.
-
-Given a user's command, the current page URL, and a simplified DOM structure, your job is to:
-1. Understand what the user wants to do
-2. Check if the current page is relevant to the user's goal
-3. Identify the best element(s) to interact with, OR suggest the user needs to navigate elsewhere first
+async function queryClaudeForAction(userCommand, base64ImageData, pageUrl) {
+  const systemPrompt = `You are an intelligent web navigation assistant. You will be given a SCREENSHOT of a webpage and a user's command.
+Your job is to:
+1. Analyze the image to understand the full visual layout.
+2. Understand the user's command.
+3. Identify the best element (button, link, input) to interact with to achieve the user's goal.
+4. Provide both text selectors AND precise coordinates for the target element.
 
 Return your response as JSON with this structure:
 {
-  "reasoning": "Brief explanation of what you understood and whether the page is relevant",
+  "reasoning": "Brief explanation of what you see and why you chose this action.",
   "action": "click" | "highlight" | "scroll" | "goback" | "not_found",
-  "selector": "text to search for in elements (for click/highlight)",
+  "selector": "The EXACT text on the element (can be null if coordinates are provided)",
+  "click_point": {"x": 0.5, "y": 0.3} | null,
+  "bbox": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.05} | null,
   "direction": "up" | "down" (for scroll),
-  "speak": "What to say to the user",
-  "multiStep": false | true,
-  "nextSteps": ["step 1", "step 2"] (if multi-step)
+  "speak": "What to say to the user"
 }
 
-IMPORTANT CONTEXT RULES:
-- If the user's goal doesn't match the current page (e.g., "make appointment" on google.com), use action "not_found" and tell them they're on the wrong page
-- If the page IS relevant but you can't find the exact element, still suggest the closest match
-- For search engines (google.com, bing.com), suggest using the search box to find the right site
+COORDINATE SYSTEM:
+- All coordinates are normalized (0.0 to 1.0) relative to the image dimensions
+- click_point: Center point where user should click (x, y)
+- bbox: Bounding box of the target element (x, y, width, height)
+- x=0 is left edge, x=1 is right edge
+- y=0 is top edge, y=1 is bottom edge
 
-Examples:
-- User: "I want to make an appointment" on dmv.ca.gov → action: "click", selector: "appointments"
-- User: "I want to make an appointment" on google.com → action: "not_found", speak: "You're on Google. Try searching for 'DMV appointment' first, or tell me which service you want to book an appointment for."
-- User: "click search" → selector: "search"
-- User: "scroll down" → action: "scroll", direction: "down"
+IMPORTANT:
+- ALWAYS provide click_point and bbox when you can visually identify a target element
+- Set click_point and bbox to null only for scroll/goback/not_found actions
+- selector can be null if coordinates are reliable, but prefer providing both when possible
+- For elements without clear text (icons, images), rely on coordinates and describe in reasoning`;
 
-Be helpful and context-aware!`;
+  const userPrompt = `User Command: "${userCommand}"
 
-  const userPrompt = `Page URL: ${pageUrl}
+Analyze the attached screenshot for the page at URL: ${pageUrl}.
+Identify the target element and provide:
+1. The action to take
+2. Text selector (if readable text exists)
+3. Precise normalized coordinates (click_point and bbox)
+4. Clear reasoning for your choice
 
-DOM Snapshot (interactive elements):
-${domSnapshot}
-
-User Command: "${userCommand}"
-
-Analyze if this page is relevant to the user's goal. What action should be taken? Respond with JSON only.`;
+Respond with JSON only.`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -133,7 +135,17 @@ Analyze if this page is relevant to the user's goal. What action should be taken
         messages: [
           {
             role: "user",
-            content: userPrompt,
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: "image/jpeg",
+                  data: base64ImageData,
+                },
+              },
+              { type: "text", text: userPrompt },
+            ],
           },
         ],
       }),
@@ -148,14 +160,89 @@ Analyze if this page is relevant to the user's goal. What action should be taken
     const data = await response.json();
     const claudeResponse = data.content[0].text;
 
-    // Parse JSON response
-    const jsonMatch = claudeResponse.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("Could not parse Claude response as JSON");
+    // Robust JSON parsing with validation
+    let actionData;
+
+    // First, try parsing the entire response as JSON
+    try {
+      actionData = JSON.parse(claudeResponse);
+    } catch (e) {
+      // Fall back to extracting JSON from code blocks or text
+      const jsonMatch =
+        claudeResponse.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/) ||
+        claudeResponse.match(/\{[\s\S]*\}/);
+
+      if (!jsonMatch) {
+        throw new Error("Could not find valid JSON in Claude response");
+      }
+
+      try {
+        actionData = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+      } catch (parseError) {
+        throw new Error(`Failed to parse JSON: ${parseError.message}`);
+      }
     }
 
-    const actionData = JSON.parse(jsonMatch[0]);
-    console.log("Parsed action:", actionData);
+    // Validate required fields and schema
+    if (!actionData || typeof actionData !== "object") {
+      throw new Error("Invalid response: not a valid object");
+    }
+
+    if (!actionData.action || typeof actionData.action !== "string") {
+      throw new Error("Invalid response: missing or invalid 'action' field");
+    }
+
+    const validActions = [
+      "click",
+      "highlight",
+      "scroll",
+      "goback",
+      "not_found",
+    ];
+    if (!validActions.includes(actionData.action)) {
+      throw new Error(
+        `Invalid response: unknown action '${actionData.action}'`
+      );
+    }
+
+    // Validate coordinate fields if present
+    if (
+      actionData.click_point &&
+      (typeof actionData.click_point !== "object" ||
+        typeof actionData.click_point.x !== "number" ||
+        typeof actionData.click_point.y !== "number" ||
+        actionData.click_point.x < 0 ||
+        actionData.click_point.x > 1 ||
+        actionData.click_point.y < 0 ||
+        actionData.click_point.y > 1)
+    ) {
+      throw new Error(
+        "Invalid response: click_point must have valid x,y coordinates (0-1)"
+      );
+    }
+
+    if (
+      actionData.bbox &&
+      (typeof actionData.bbox !== "object" ||
+        typeof actionData.bbox.x !== "number" ||
+        typeof actionData.bbox.y !== "number" ||
+        typeof actionData.bbox.width !== "number" ||
+        typeof actionData.bbox.height !== "number" ||
+        actionData.bbox.x < 0 ||
+        actionData.bbox.x > 1 ||
+        actionData.bbox.y < 0 ||
+        actionData.bbox.y > 1 ||
+        actionData.bbox.width <= 0 ||
+        actionData.bbox.width > 1 ||
+        actionData.bbox.height <= 0 ||
+        actionData.bbox.height > 1)
+    ) {
+      throw new Error(
+        "Invalid response: bbox must have valid normalized coordinates"
+      );
+    }
+
+    console.log("Parsed and validated action:", actionData);
 
     // Convert Claude's action format to our payload format
     let payload = {
@@ -181,7 +268,55 @@ Analyze if this page is relevant to the user's goal. What action should be taken
       actionData.action === "highlight"
     ) {
       payload.action = actionData.action;
-      payload.selector = actionData.selector;
+
+      // Validate that we have at least one targeting method
+      const hasSelector =
+        actionData.selector &&
+        typeof actionData.selector === "string" &&
+        actionData.selector.trim().length > 0;
+      const hasCoordinates =
+        actionData.click_point &&
+        typeof actionData.click_point === "object" &&
+        typeof actionData.click_point.x === "number" &&
+        typeof actionData.click_point.y === "number";
+
+      if (!hasSelector && !hasCoordinates) {
+        throw new Error(
+          `Invalid response: ${actionData.action} action requires either a valid selector or click_point coordinates`
+        );
+      }
+
+      // Map targeting fields with safe fallbacks
+      payload.selector = hasSelector ? actionData.selector.trim() : null;
+
+      // Add coordinate-based targeting with validation
+      if (hasCoordinates) {
+        payload.click_point = {
+          x: Math.max(0, Math.min(1, actionData.click_point.x)),
+          y: Math.max(0, Math.min(1, actionData.click_point.y)),
+        };
+      } else {
+        payload.click_point = null;
+      }
+
+      // Add bounding box with validation
+      if (
+        actionData.bbox &&
+        typeof actionData.bbox === "object" &&
+        typeof actionData.bbox.x === "number" &&
+        typeof actionData.bbox.y === "number" &&
+        typeof actionData.bbox.width === "number" &&
+        typeof actionData.bbox.height === "number"
+      ) {
+        payload.bbox = {
+          x: Math.max(0, Math.min(1, actionData.bbox.x)),
+          y: Math.max(0, Math.min(1, actionData.bbox.y)),
+          width: Math.max(0, Math.min(1, actionData.bbox.width)),
+          height: Math.max(0, Math.min(1, actionData.bbox.height)),
+        };
+      } else {
+        payload.bbox = null;
+      }
     }
 
     return {
@@ -235,48 +370,24 @@ async function handleCommand(text) {
     }
 
     try {
-      // Request DOM snapshot from content script with timeout
-      const timeoutPromise = new Promise((resolve) => {
-        setTimeout(() => resolve(null), 5000); // 5 second timeout
+      // Capture screenshot of the visible tab
+      const imageDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
+        format: "jpeg",
+        quality: 80,
       });
 
-      const responsePromise = new Promise((resolve) => {
-        chrome.tabs.sendMessage(
-          tab.id,
-          { type: "GET_DOM_SNAPSHOT" },
-          (response) => {
-            if (chrome.runtime.lastError) {
-              console.error("Message error:", chrome.runtime.lastError.message);
-              resolve(null);
-            } else {
-              resolve(response);
-            }
-          }
-        );
-      });
-
-      const response = await Promise.race([responsePromise, timeoutPromise]);
-
-      if (!response) {
-        console.error(
-          "Could not get DOM snapshot - content script may not be loaded"
-        );
-        sendToActiveTab({
-          type: "SPEAK_ERROR",
-          message:
-            "Please refresh the page and try again. Spotlight needs to load on this page first.",
-        });
-        return;
+      if (!imageDataUrl) {
+        throw new Error("Failed to capture screenshot");
       }
 
-      console.log("Got DOM snapshot, querying Claude...");
+      const base64ImageData = imageDataUrl.split(",")[1];
 
-      // Send command + DOM to Claude for reasoning
-      const action = await queryClaudeForAction(
-        text,
-        response.domSnapshot,
-        response.url
-      );
+      if (!base64ImageData) {
+        throw new Error("Failed to extract base64 data from screenshot");
+      }
+
+      console.log("Screenshot captured, querying Claude...");
+      const action = await queryClaudeForAction(text, base64ImageData, tab.url);
 
       if (action) {
         console.log("Claude reasoned action:", action);
