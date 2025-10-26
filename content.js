@@ -9,7 +9,7 @@ let ttsRequestId = 0;
 const pendingTTSRequests = new Map();
 
 // Initialize on load - check Fish Audio config
-chrome.storage.sync.get(['fishAudioApiKey'], (data) => {
+chrome.storage.local.get(['fishAudioApiKey'], (data) => {
   useFishAudio = !!data.fishAudioApiKey;
   console.log('Fish Audio TTS:', useFishAudio ? 'enabled' : 'disabled (falling back to native TTS)');
 });
@@ -83,6 +83,44 @@ function speakNative(text) {
   speechSynthesis.speak(u);
 }
 
+// Check if an input field contains sensitive data
+function isSensitiveInput(el) {
+  if (!el || el.tagName !== 'INPUT') return false;
+  
+  const type = (el.type || '').toLowerCase();
+  const name = (el.name || '').toLowerCase();
+  const id = (el.id || '').toLowerCase();
+  const autocomplete = (el.autocomplete || '').toLowerCase();
+  
+  // Sensitive input types
+  const sensitiveTypes = ['password', 'tel', 'email', 'number'];
+  if (sensitiveTypes.includes(type)) return true;
+  
+  // Sensitive field patterns (credit cards, SSN, etc.)
+  const sensitivePatterns = [
+    'password', 'passwd', 'pwd',
+    'ssn', 'social-security',
+    'credit', 'card', 'cvv', 'cvc', 'ccv',
+    'pin', 'security-code',
+    'account', 'routing',
+    'tax-id', 'ein'
+  ];
+  
+  const fieldText = `${name} ${id} ${autocomplete}`.toLowerCase();
+  return sensitivePatterns.some(pattern => fieldText.includes(pattern));
+}
+
+// Get safe text from element, avoiding sensitive input values
+function getSafeElementText(el) {
+  // For sensitive inputs, only use non-value attributes
+  if (isSensitiveInput(el)) {
+    return (el.ariaLabel || el.placeholder || el.title || '').trim();
+  }
+  
+  // For non-sensitive elements, include value
+  return (el.innerText || el.textContent || el.value || el.ariaLabel || el.placeholder || el.title || '').trim();
+}
+
 // Find element by text or aria-label
 function findElement(keyword) {
   if (!keyword) {
@@ -102,7 +140,7 @@ function findElement(keyword) {
   
   // First pass: exact match
   for (const el of elements) {
-    const text = (el.innerText || el.textContent || el.value || el.ariaLabel || el.placeholder || el.title || "").toLowerCase().trim();
+    const text = getSafeElementText(el).toLowerCase();
     if (text === keyword) {
       console.log('findElement: Found exact match:', el);
       return el;
@@ -111,7 +149,7 @@ function findElement(keyword) {
   
   // Second pass: partial match
   for (const el of elements) {
-    const text = (el.innerText || el.textContent || el.value || el.ariaLabel || el.placeholder || el.title || "").toLowerCase().trim();
+    const text = getSafeElementText(el).toLowerCase();
     if (text.includes(keyword)) {
       console.log('findElement: Found partial match:', el, 'text:', text);
       return el;
@@ -151,7 +189,7 @@ function highlight(el) {
   if (cursor) {
     console.log('highlight: Guiding cursor to element');
     cursor.guideTo(el);
-    const elementText = el.innerText || el.value || el.ariaLabel || 'this element';
+    const elementText = getSafeElementText(el) || 'this element';
     cursor.addTooltip(el, `Click: ${elementText.substring(0, 30)}`);
   }
   
@@ -183,12 +221,20 @@ function getDOMSnapshot() {
   
   const snapshot = [];
   elements.forEach((el, idx) => {
-    const text = (el.innerText || el.textContent || el.value || el.ariaLabel || el.placeholder || el.title || "").trim();
-    if (text && text.length < 100) { // Skip very long text
+    // Use safe text extraction that avoids sensitive input values
+    const text = getSafeElementText(el);
+    
+    // Skip empty text or very long text
+    if (text && text.length < 100) {
       const tag = el.tagName.toLowerCase();
       const role = el.getAttribute('role') || '';
       const type = el.getAttribute('type') || '';
-      snapshot.push(`[${idx}] <${tag}${role ? ` role="${role}"` : ''}${type ? ` type="${type}"` : ''}> ${text.substring(0, 50)}`);
+      
+      // For sensitive inputs, add a marker but don't include the value
+      const isSensitive = isSensitiveInput(el);
+      const displayText = isSensitive ? `[${type || 'input'} field]` : text.substring(0, 50);
+      
+      snapshot.push(`[${idx}] <${tag}${role ? ` role="${role}"` : ''}${type ? ` type="${type}"` : ''}> ${displayText}`);
     }
   });
   
@@ -253,7 +299,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   
   // Reload config
   if (msg.type === "RELOAD_FISH_AUDIO_CONFIG" || msg.type === "RELOAD_CONFIG") {
-    chrome.storage.sync.get(['fishAudioApiKey'], (data) => {
+    chrome.storage.local.get(['fishAudioApiKey'], (data) => {
       useFishAudio = !!data.fishAudioApiKey;
       console.log('Fish Audio config reloaded:', useFishAudio ? 'enabled' : 'disabled');
     });

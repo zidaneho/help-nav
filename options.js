@@ -54,7 +54,7 @@ function constructOptions(buttonColors) {
 constructOptions(presetButtonColors);
 
 // Load saved settings
-chrome.storage.sync.get(['claudeApiKey', 'fishAudioApiKey', 'fishAudioReferenceId'], (data) => {
+chrome.storage.local.get(['claudeApiKey', 'fishAudioApiKey', 'fishAudioReferenceId'], (data) => {
   if (data.claudeApiKey) {
     claudeApiKeyInput.value = data.claudeApiKey;
   }
@@ -77,7 +77,7 @@ saveBtn.addEventListener('click', () => {
     return;
   }
 
-  chrome.storage.sync.set({
+  chrome.storage.local.set({
     claudeApiKey: claudeKey,
     fishAudioApiKey: fishKey,
     fishAudioReferenceId: referenceId

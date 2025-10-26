@@ -223,7 +223,7 @@ if (localStorage.getItem("micPermissionGranted") === "true") {
 }
 
 // Check configuration
-chrome.storage.sync.get(["claudeApiKey", "fishAudioApiKey"], (data) => {
+chrome.storage.local.get(["claudeApiKey", "fishAudioApiKey"], (data) => {
   // Check Claude (required for intelligent commands)
   if (!data.claudeApiKey) {
     statusText.textContent = "⚠️ Configure Claude API";

@@ -10,7 +10,7 @@ let fishAudioApiKey = null;
 let fishAudioReferenceId = null;
 
 // Load config
-chrome.storage.sync.get(
+chrome.storage.local.get(
   ["claudeApiKey", "fishAudioApiKey", "fishAudioReferenceId"],
   (data) => {
     claudeApiKey = data.claudeApiKey || null;
@@ -127,7 +127,7 @@ Analyze if this page is relevant to the user's goal. What action should be taken
         "anthropic-dangerous-direct-browser-access": "true",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-5",
+        model: "claude-sonnet-4-20250514",
         max_tokens: 1024,
         system: systemPrompt,
         messages: [
@@ -147,7 +147,6 @@ Analyze if this page is relevant to the user's goal. What action should be taken
 
     const data = await response.json();
     const claudeResponse = data.content[0].text;
-    console.log("Claude response:", claudeResponse);
 
     // Parse JSON response
     const jsonMatch = claudeResponse.match(/\{[\s\S]*\}/);
@@ -349,7 +348,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
   if (msg.type === "RELOAD_FISH_AUDIO_CONFIG" || msg.type === "RELOAD_CONFIG") {
     // Reload all configs
-    chrome.storage.sync.get(
+    chrome.storage.local.get(
       ["claudeApiKey", "fishAudioApiKey", "fishAudioReferenceId"],
       (data) => {
         claudeApiKey = data.claudeApiKey || null;
@@ -364,7 +363,15 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       }
     );
     // Forward the message to all tabs
-    sendToActiveTab({ type: "RELOAD_CONFIG" });
+    chrome.tabs.query({}, (tabs) => {
+      for (const t of tabs) {
+        chrome.tabs.sendMessage(t.id, { type: "RELOAD_CONFIG" }, () => {
+          if (chrome.runtime.lastError) {
+            //ignore tabs without content scripts
+          }
+        });
+      }
+    });
   }
 
   // Handle TTS request from content script

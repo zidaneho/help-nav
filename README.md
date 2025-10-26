@@ -180,8 +180,8 @@ Spotlight uses Anthropic's Claude 3.5 Sonnet for intelligent command understandi
 - **No Training**: Works on any website without custom configuration
 
 **Privacy**:
-- Only sends: user command + DOM snapshot (text of buttons/links)
-- Does NOT send: full HTML, images, passwords, or sensitive data
+- Only sends: user command + a redacted DOM snapshot of visible labels/titles/placeholders for interactive elements (buttons/links/labelled inputs) and key headings.
+- Never sends: input values, passwords, multi-factor codes, payment or personal identifiers. Password and sensitive fields are excluded client‑side.
 - Claude API: https://api.anthropic.com/v1/messages
 
 ### Fish Audio Integration (Optional)
