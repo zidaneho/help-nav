@@ -37,6 +37,15 @@
         box-sizing: border-box;
         margin-bottom: 10px;
       }
+      input[type="checkbox"] {
+        margin-right: 8px;
+      }
+      .checkbox-label {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+        cursor: pointer;
+      }
       button {
         padding: 10px 20px;
         background: #2563eb;
@@ -98,6 +107,16 @@
       
       <button id="saveBtn">Save Settings</button>
       <div id="status" class="status"></div>
+    </div>
+
+    <div class="section">
+      <h2>🔧 Debug Settings</h2>
+      <label class="checkbox-label">
+        <input type="checkbox" id="showDebugMarker" />
+        <span>Show Debug Marker</span>
+      </label>
+      <p class="info">When enabled, displays a red dot on the page showing exactly where Claude's AI vision system is targeting. This helps debug coordinate accuracy and understand why certain elements are being selected.</p>
+      <p class="info"><strong>Recommended:</strong> Enable this while testing to see Claude's targeting precision, disable for normal use.</p>
     </div>
 
     <div class="section">

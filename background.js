@@ -205,41 +205,54 @@ Respond with JSON only.`;
       );
     }
 
-    // Validate coordinate fields if present
-    if (
-      actionData.click_point &&
-      (typeof actionData.click_point !== "object" ||
-        typeof actionData.click_point.x !== "number" ||
-        typeof actionData.click_point.y !== "number" ||
-        actionData.click_point.x < 0 ||
-        actionData.click_point.x > 1 ||
-        actionData.click_point.y < 0 ||
-        actionData.click_point.y > 1)
-    ) {
-      throw new Error(
-        "Invalid response: click_point must have valid x,y coordinates (0-1)"
-      );
+    // Validate and normalize coordinate fields if present
+    if (actionData.click_point) {
+      if (typeof actionData.click_point !== "object" ||
+          typeof actionData.click_point.x !== "number" ||
+          typeof actionData.click_point.y !== "number") {
+        throw new Error("Invalid response: click_point must be an object with numeric x,y coordinates");
+      }
+      
+      // Clamp coordinates to valid range and warn if out of bounds
+      const originalX = actionData.click_point.x;
+      const originalY = actionData.click_point.y;
+      
+      actionData.click_point.x = Math.max(0, Math.min(1, originalX));
+      actionData.click_point.y = Math.max(0, Math.min(1, originalY));
+      
+      if (originalX !== actionData.click_point.x || originalY !== actionData.click_point.y) {
+        console.warn(`Claude returned out-of-bounds coordinates (${originalX}, ${originalY}), clamped to (${actionData.click_point.x}, ${actionData.click_point.y})`);
+      }
     }
 
-    if (
-      actionData.bbox &&
-      (typeof actionData.bbox !== "object" ||
-        typeof actionData.bbox.x !== "number" ||
-        typeof actionData.bbox.y !== "number" ||
-        typeof actionData.bbox.width !== "number" ||
-        typeof actionData.bbox.height !== "number" ||
-        actionData.bbox.x < 0 ||
-        actionData.bbox.x > 1 ||
-        actionData.bbox.y < 0 ||
-        actionData.bbox.y > 1 ||
-        actionData.bbox.width <= 0 ||
-        actionData.bbox.width > 1 ||
-        actionData.bbox.height <= 0 ||
-        actionData.bbox.height > 1)
-    ) {
-      throw new Error(
-        "Invalid response: bbox must have valid normalized coordinates"
-      );
+    if (actionData.bbox) {
+      if (typeof actionData.bbox !== "object" ||
+          typeof actionData.bbox.x !== "number" ||
+          typeof actionData.bbox.y !== "number" ||
+          typeof actionData.bbox.width !== "number" ||
+          typeof actionData.bbox.height !== "number") {
+        throw new Error("Invalid response: bbox must be an object with numeric x,y,width,height");
+      }
+      
+      // Clamp bbox coordinates and dimensions to valid ranges
+      const original = { ...actionData.bbox };
+      
+      actionData.bbox.x = Math.max(0, Math.min(1, actionData.bbox.x));
+      actionData.bbox.y = Math.max(0, Math.min(1, actionData.bbox.y));
+      actionData.bbox.width = Math.max(0.01, Math.min(1, actionData.bbox.width)); // Min 0.01 to avoid zero width
+      actionData.bbox.height = Math.max(0.01, Math.min(1, actionData.bbox.height)); // Min 0.01 to avoid zero height
+      
+      // Ensure bbox doesn't extend beyond image bounds
+      if (actionData.bbox.x + actionData.bbox.width > 1) {
+        actionData.bbox.width = 1 - actionData.bbox.x;
+      }
+      if (actionData.bbox.y + actionData.bbox.height > 1) {
+        actionData.bbox.height = 1 - actionData.bbox.y;
+      }
+      
+      if (JSON.stringify(original) !== JSON.stringify(actionData.bbox)) {
+        console.warn(`Claude returned out-of-bounds bbox, clamped from`, original, 'to', actionData.bbox);
+      }
     }
 
     console.log("Parsed and validated action:", actionData);
@@ -291,10 +304,7 @@ Respond with JSON only.`;
 
       // Add coordinate-based targeting with validation
       if (hasCoordinates) {
-        payload.click_point = {
-          x: Math.max(0, Math.min(1, actionData.click_point.x)),
-          y: Math.max(0, Math.min(1, actionData.click_point.y)),
-        };
+        payload.click_point = actionData.click_point;
       } else {
         payload.click_point = null;
       }
@@ -308,12 +318,7 @@ Respond with JSON only.`;
         typeof actionData.bbox.width === "number" &&
         typeof actionData.bbox.height === "number"
       ) {
-        payload.bbox = {
-          x: Math.max(0, Math.min(1, actionData.bbox.x)),
-          y: Math.max(0, Math.min(1, actionData.bbox.y)),
-          width: Math.max(0, Math.min(1, actionData.bbox.width)),
-          height: Math.max(0, Math.min(1, actionData.bbox.height)),
-        };
+        payload.bbox = actionData.bbox;
       } else {
         payload.bbox = null;
       }
