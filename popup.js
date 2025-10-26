@@ -54,9 +54,10 @@ chrome.runtime.onMessage.addListener((message) => {
 // Request current status from background
 sendMessage({ type: "GET_STATUS" });
 
-// Check Fish Audio configuration
-chrome.storage.sync.get(["fishAudioApiKey"], (data) => {
-  // TTS Status
+// Check configuration
+chrome.storage.local.get(["claudeApiKey", "fishAudioApiKey"], (data) => {
+  
+  // Check Fish Audio (optional for TTS)
   if (data.fishAudioApiKey) {
     ttsStatus.textContent = "🐟 Fish Audio (Premium)";
     ttsStatus.classList.remove("tts-warn");

@@ -1,10 +1,12 @@
 const selectedClassName = "current";
 
-// Fish Audio API configuration
-const apiKeyInput = document.getElementById("apiKey");
-const referenceIdInput = document.getElementById("referenceId");
-const saveBtn = document.getElementById("saveBtn");
-const statusDiv = document.getElementById("status");
+// API configuration
+const claudeApiKeyInput = document.getElementById('claudeApiKey');
+const apiKeyInput = document.getElementById('apiKey');
+const referenceIdInput = document.getElementById('referenceId');
+const showDebugMarkerInput = document.getElementById('showDebugMarker');
+const saveBtn = document.getElementById('saveBtn');
+const statusDiv = document.getElementById('status');
 
 // Show status message
 function showStatus(message, type = "info") {
@@ -33,20 +35,28 @@ function handleButtonClick(event) {
 }
 
 // Load saved Fish Audio settings
-chrome.storage.sync.get(["fishAudioApiKey", "fishAudioReferenceId"], (data) => {
+chrome.storage.local.get(['claudeApiKey', 'fishAudioApiKey', 'fishAudioReferenceId', 'showDebugMarker'], (data) => {
+  if (data.claudeApiKey) {
+    claudeApiKeyInput.value = data.claudeApiKey;
+  }
   if (data.fishAudioApiKey) {
     apiKeyInput.value = data.fishAudioApiKey;
   }
   if (data.fishAudioReferenceId) {
     referenceIdInput.value = data.fishAudioReferenceId;
   }
+  // Default to false if not set
+  showDebugMarkerInput.checked = data.showDebugMarker || false;
 });
 
-// Save Fish Audio settings
-saveBtn.addEventListener("click", () => {
-  const apiKey = apiKeyInput.value.trim();
+// Save settings
+saveBtn.addEventListener('click', () => {
+  const claudeKey = claudeApiKeyInput.value.trim();
+  const fishKey = apiKeyInput.value.trim();
   const referenceId = referenceIdInput.value.trim();
+  const showDebugMarker = showDebugMarkerInput.checked;
 
+<<<<<<< HEAD
   chrome.storage.sync.set(
     {
       fishAudioApiKey: apiKey,
@@ -58,4 +68,21 @@ saveBtn.addEventListener("click", () => {
       chrome.runtime.sendMessage({ type: "RELOAD_FISH_AUDIO_CONFIG" });
     }
   );
+=======
+  if (!claudeKey) {
+    showStatus('Please enter a Claude API key (required for intelligent commands)', 'error');
+    return;
+  }
+
+  chrome.storage.local.set({
+    claudeApiKey: claudeKey,
+    fishAudioApiKey: fishKey,
+    fishAudioReferenceId: referenceId,
+    showDebugMarker: showDebugMarker
+  }, () => {
+    showStatus('Settings saved successfully!', 'success');
+    // Notify background script to reload settings
+    chrome.runtime.sendMessage({ type: 'RELOAD_CONFIG' });
+  });
+>>>>>>> 21d247aaf7dd9392c5b4afa87b9f072ca608ac88
 });

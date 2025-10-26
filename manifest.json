@@ -7,14 +7,11 @@
     "service_worker": "background.js"
   },
   "permissions": ["storage", "activeTab", "scripting"],
-  "host_permissions": ["https://api.fish.audio/*"],
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["assistant-panel.js", "cursor-guide.js", "content.js"],
-      "css": ["assistant-panel.css", "cursor-guide.css"]
-    }
-  ],
+  "host_permissions": ["https://api.fish.audio/*", "https://api.anthropic.com/*"],
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["assistant-panel.js", "cursor-guide.js", "content.js"]
+  }],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

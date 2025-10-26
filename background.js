@@ -5,18 +5,24 @@
 let listening = false;
 let lastTranscript = "";
 let lastAction = null;
+let claudeApiKey = null;
 let fishAudioApiKey = null;
 let fishAudioReferenceId = null;
 
-// Load Fish Audio config
-chrome.storage.sync.get(["fishAudioApiKey", "fishAudioReferenceId"], (data) => {
-  fishAudioApiKey = data.fishAudioApiKey || null;
-  fishAudioReferenceId = data.fishAudioReferenceId || null;
-  console.log(
-    "Fish Audio config loaded:",
-    fishAudioApiKey ? "API key present" : "No API key"
-  );
-});
+// Load config
+chrome.storage.local.get(
+  ["claudeApiKey", "fishAudioApiKey", "fishAudioReferenceId"],
+  (data) => {
+    claudeApiKey = data.claudeApiKey || null;
+    fishAudioApiKey = data.fishAudioApiKey || null;
+    fishAudioReferenceId = data.fishAudioReferenceId || null;
+    console.log("Claude API:", claudeApiKey ? "Configured" : "Not configured");
+    console.log(
+      "Fish Audio:",
+      fishAudioApiKey ? "Configured" : "Not configured"
+    );
+  }
+);
 
 // Generate TTS using Fish Audio API (background script avoids CORS)
 async function generateFishAudioTTS(text) {
@@ -52,7 +58,16 @@ async function generateFishAudioTTS(text) {
     const audioBlob = await response.blob();
     // Convert blob to base64 for passing to content script
     const arrayBuffer = await audioBlob.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    const bytes = new Uint8Array(arrayBuffer);
+
+    // Convert to base64 in chunks to avoid stack overflow
+    let binary = "";
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+    const base64 = btoa(binary);
     return base64;
   } catch (error) {
     console.error("Error generating Fish Audio TTS:", error);
@@ -60,64 +75,350 @@ async function generateFishAudioTTS(text) {
   }
 }
 
-// Command parser (simple keywords)
-function handleCommand(text) {
-  console.log("handleCommand: Received text:", text);
-  text = text.toLowerCase();
+// Query Claude API for action reasoning
+async function queryClaudeForAction(userCommand, base64ImageData, pageUrl) {
+  const systemPrompt = `You are an intelligent web navigation assistant. You will be given a SCREENSHOT of a webpage and a user's command.
+Your job is to:
+1. Analyze the image to understand the full visual layout.
+2. Understand the user's command.
+3. Identify the best element (button, link, input) to interact with to achieve the user's goal.
+4. Provide both text selectors AND precise coordinates for the target element.
 
-  let payload = null;
-  if (text.includes("scroll down")) {
-    payload = { action: "scroll", direction: "down", speak: "Scrolling down." };
-  } else if (text.includes("scroll up")) {
-    payload = { action: "scroll", direction: "up", speak: "Scrolling up." };
-  } else if (text.includes("click")) {
-    const target = text.split("click")[1]?.trim();
-    console.log(
-      'handleCommand: Extracted target from "click" command:',
-      target
-    );
-    payload = {
-      action: "click",
-      selector: target,
-      speak: `Here's the ${target} button. Click it to proceed.`,
-    };
-  } else if (text.includes("highlight")) {
-    const target = text.split("highlight")[1]?.trim();
-    console.log(
-      'handleCommand: Extracted target from "highlight" command:',
-      target
-    );
-    payload = {
-      action: "highlight",
-      selector: target,
-      speak: `Highlighting ${target}.`,
-    };
-  } else if (text.includes("go back")) {
-    payload = { action: "goback", speak: "Going back." };
-  } else {
-    console.log("handleCommand: No matching command found for:", text);
-  }
+Return your response as JSON with this structure:
+{
+  "reasoning": "Brief explanation of what you see and why you chose this action.",
+  "action": "click" | "highlight" | "scroll" | "goback" | "not_found",
+  "selector": "The EXACT text on the element (can be null if coordinates are provided)",
+  "click_point": {"x": 0.5, "y": 0.3} | null,
+  "bbox": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.05} | null,
+  "direction": "up" | "down" (for scroll),
+  "speak": "What to say to the user"
+}
 
-  if (payload) {
-    console.log("handleCommand: Sending payload:", payload);
-    lastAction = payload;
-    // Send nav action to active tab
-    sendToActiveTab({ type: "NAV_ACTION", payload });
-    // Send AI response to active tab for assistant panel
-    sendToActiveTab({
-      type: "AI_RESPONSE",
-      text: payload.speak || "",
+COORDINATE SYSTEM:
+- All coordinates are normalized (0.0 to 1.0) relative to the image dimensions
+- click_point: Center point where user should click (x, y)
+- bbox: Bounding box of the target element (x, y, width, height)
+- x=0 is left edge, x=1 is right edge
+- y=0 is top edge, y=1 is bottom edge
+
+IMPORTANT:
+- ALWAYS provide click_point and bbox when you can visually identify a target element
+- Set click_point and bbox to null only for scroll/goback/not_found actions
+- selector can be null if coordinates are reliable, but prefer providing both when possible
+- For elements without clear text (icons, images), rely on coordinates and describe in reasoning`;
+
+  const userPrompt = `User Command: "${userCommand}"
+
+Analyze the attached screenshot for the page at URL: ${pageUrl}.
+Identify the target element and provide:
+1. The action to take
+2. Text selector (if readable text exists)
+3. Precise normalized coordinates (click_point and bbox)
+4. Clear reasoning for your choice
+
+Respond with JSON only.`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": claudeApiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: "image/jpeg",
+                  data: base64ImageData,
+                },
+              },
+              { type: "text", text: userPrompt },
+            ],
+          },
+        ],
+      }),
     });
-    // Also notify popup with AI response text to render chat bubble
-    try {
-      chrome.runtime.sendMessage({
-        type: "AI_RESPONSE",
-        text: payload.speak || "",
-      });
-    } catch (e) {
-      // ignore if no popup is listening
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Claude API error:", response.status, errorText);
+      throw new Error(`Claude API error: ${response.status}`);
     }
+
+    const data = await response.json();
+    const claudeResponse = data.content[0].text;
+
+    // Robust JSON parsing with validation
+    let actionData;
+
+    // First, try parsing the entire response as JSON
+    try {
+      actionData = JSON.parse(claudeResponse);
+    } catch (e) {
+      // Fall back to extracting JSON from code blocks or text
+      const jsonMatch =
+        claudeResponse.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/) ||
+        claudeResponse.match(/\{[\s\S]*\}/);
+
+      if (!jsonMatch) {
+        throw new Error("Could not find valid JSON in Claude response");
+      }
+
+      try {
+        actionData = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+      } catch (parseError) {
+        throw new Error(`Failed to parse JSON: ${parseError.message}`);
+      }
+    }
+
+    // Validate required fields and schema
+    if (!actionData || typeof actionData !== "object") {
+      throw new Error("Invalid response: not a valid object");
+    }
+
+    if (!actionData.action || typeof actionData.action !== "string") {
+      throw new Error("Invalid response: missing or invalid 'action' field");
+    }
+
+    const validActions = [
+      "click",
+      "highlight",
+      "scroll",
+      "goback",
+      "not_found",
+    ];
+    if (!validActions.includes(actionData.action)) {
+      throw new Error(
+        `Invalid response: unknown action '${actionData.action}'`
+      );
+    }
+
+    // Validate and normalize coordinate fields if present
+    if (actionData.click_point) {
+      if (typeof actionData.click_point !== "object" ||
+          typeof actionData.click_point.x !== "number" ||
+          typeof actionData.click_point.y !== "number") {
+        throw new Error("Invalid response: click_point must be an object with numeric x,y coordinates");
+      }
+      
+      // Clamp coordinates to valid range and warn if out of bounds
+      const originalX = actionData.click_point.x;
+      const originalY = actionData.click_point.y;
+      
+      actionData.click_point.x = Math.max(0, Math.min(1, originalX));
+      actionData.click_point.y = Math.max(0, Math.min(1, originalY));
+      
+      if (originalX !== actionData.click_point.x || originalY !== actionData.click_point.y) {
+        console.warn(`Claude returned out-of-bounds coordinates (${originalX}, ${originalY}), clamped to (${actionData.click_point.x}, ${actionData.click_point.y})`);
+      }
+    }
+
+    if (actionData.bbox) {
+      if (typeof actionData.bbox !== "object" ||
+          typeof actionData.bbox.x !== "number" ||
+          typeof actionData.bbox.y !== "number" ||
+          typeof actionData.bbox.width !== "number" ||
+          typeof actionData.bbox.height !== "number") {
+        throw new Error("Invalid response: bbox must be an object with numeric x,y,width,height");
+      }
+      
+      // Clamp bbox coordinates and dimensions to valid ranges
+      const original = { ...actionData.bbox };
+      
+      actionData.bbox.x = Math.max(0, Math.min(1, actionData.bbox.x));
+      actionData.bbox.y = Math.max(0, Math.min(1, actionData.bbox.y));
+      actionData.bbox.width = Math.max(0.01, Math.min(1, actionData.bbox.width)); // Min 0.01 to avoid zero width
+      actionData.bbox.height = Math.max(0.01, Math.min(1, actionData.bbox.height)); // Min 0.01 to avoid zero height
+      
+      // Ensure bbox doesn't extend beyond image bounds
+      if (actionData.bbox.x + actionData.bbox.width > 1) {
+        actionData.bbox.width = 1 - actionData.bbox.x;
+      }
+      if (actionData.bbox.y + actionData.bbox.height > 1) {
+        actionData.bbox.height = 1 - actionData.bbox.y;
+      }
+      
+      if (JSON.stringify(original) !== JSON.stringify(actionData.bbox)) {
+        console.warn(`Claude returned out-of-bounds bbox, clamped from`, original, 'to', actionData.bbox);
+      }
+    }
+
+    console.log("Parsed and validated action:", actionData);
+
+    // Convert Claude's action format to our payload format
+    let payload = {
+      speak: actionData.speak || "Processing...",
+    };
+
+    if (actionData.action === "not_found") {
+      // Claude determined the page isn't relevant to user's goal
+      // Just speak the message, don't try to highlight anything
+      return {
+        payload: null,
+        reasoning: actionData.reasoning,
+        speakOnly: true,
+        message: actionData.speak,
+      };
+    } else if (actionData.action === "scroll") {
+      payload.action = "scroll";
+      payload.direction = actionData.direction || "down";
+    } else if (actionData.action === "goback") {
+      payload.action = "goback";
+    } else if (
+      actionData.action === "click" ||
+      actionData.action === "highlight"
+    ) {
+      payload.action = actionData.action;
+
+      // Validate that we have at least one targeting method
+      const hasSelector =
+        actionData.selector &&
+        typeof actionData.selector === "string" &&
+        actionData.selector.trim().length > 0;
+      const hasCoordinates =
+        actionData.click_point &&
+        typeof actionData.click_point === "object" &&
+        typeof actionData.click_point.x === "number" &&
+        typeof actionData.click_point.y === "number";
+
+      if (!hasSelector && !hasCoordinates) {
+        throw new Error(
+          `Invalid response: ${actionData.action} action requires either a valid selector or click_point coordinates`
+        );
+      }
+
+      // Map targeting fields with safe fallbacks
+      payload.selector = hasSelector ? actionData.selector.trim() : null;
+
+      // Add coordinate-based targeting with validation
+      if (hasCoordinates) {
+        payload.click_point = actionData.click_point;
+      } else {
+        payload.click_point = null;
+      }
+
+      // Add bounding box with validation
+      if (
+        actionData.bbox &&
+        typeof actionData.bbox === "object" &&
+        typeof actionData.bbox.x === "number" &&
+        typeof actionData.bbox.y === "number" &&
+        typeof actionData.bbox.width === "number" &&
+        typeof actionData.bbox.height === "number"
+      ) {
+        payload.bbox = actionData.bbox;
+      } else {
+        payload.bbox = null;
+      }
+    }
+
+    return {
+      payload: payload,
+      reasoning: actionData.reasoning,
+      multiStep: actionData.multiStep,
+      nextSteps: actionData.nextSteps,
+    };
+  } catch (error) {
+    console.error("Error querying Claude:", error);
+    throw error;
   }
+}
+
+// Use Claude to understand commands and reason about page actions
+async function handleCommand(text) {
+  console.log("handleCommand: Received command:", text);
+
+  if (!claudeApiKey) {
+    console.error("Claude API key not configured");
+    sendToActiveTab({
+      type: "SPEAK_ERROR",
+      message:
+        "Please configure your Claude API key in settings to use intelligent commands.",
+    });
+    return;
+  }
+
+  // First, get the current page DOM context from the active tab
+  chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+    if (!tabs.length) {
+      console.error("No active tab found");
+      return;
+    }
+
+    const tab = tabs[0];
+
+    // Check if this is a chrome:// or other restricted page
+    if (
+      tab.url.startsWith("chrome://") ||
+      tab.url.startsWith("chrome-extension://") ||
+      tab.url.startsWith("edge://")
+    ) {
+      console.error("Cannot run on chrome:// or restricted pages");
+      sendToActiveTab({
+        type: "SPEAK_ERROR",
+        message:
+          "Spotlight cannot work on Chrome special pages. Please navigate to a regular website.",
+      });
+      return;
+    }
+
+    try {
+      // Capture screenshot of the visible tab
+      const imageDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
+        format: "jpeg",
+        quality: 80,
+      });
+
+      if (!imageDataUrl) {
+        throw new Error("Failed to capture screenshot");
+      }
+
+      const base64ImageData = imageDataUrl.split(",")[1];
+
+      if (!base64ImageData) {
+        throw new Error("Failed to extract base64 data from screenshot");
+      }
+
+      console.log("Screenshot captured, querying Claude...");
+      const action = await queryClaudeForAction(text, base64ImageData, tab.url);
+
+      if (action) {
+        console.log("Claude reasoned action:", action);
+
+        // If Claude says page isn't relevant, just speak the message
+        if (action.speakOnly) {
+          console.log("Page not relevant to user goal:", action.reasoning);
+          sendToActiveTab({
+            type: "SPEAK_ERROR",
+            message: action.message,
+          });
+        } else if (action.payload) {
+          // Normal action - execute it
+          lastAction = action.payload;
+          sendToActiveTab({ type: "NAV_ACTION", payload: action.payload });
+        }
+      }
+    } catch (error) {
+      console.error("Error processing command with Claude:", error);
+      sendToActiveTab({
+        type: "SPEAK_ERROR",
+        message:
+          "Sorry, I encountered an error processing your command. Check the console for details.",
+      });
+    }
+  });
 }
 
 // Sends a message to the current tab
@@ -161,18 +462,32 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       lastTranscript: lastTranscript,
     });
   }
-  if (msg.type === "RELOAD_FISH_AUDIO_CONFIG") {
-    // Reload Fish Audio config
-    chrome.storage.sync.get(
-      ["fishAudioApiKey", "fishAudioReferenceId"],
+  if (msg.type === "RELOAD_FISH_AUDIO_CONFIG" || msg.type === "RELOAD_CONFIG") {
+    // Reload all configs
+    chrome.storage.local.get(
+      ["claudeApiKey", "fishAudioApiKey", "fishAudioReferenceId"],
       (data) => {
+        claudeApiKey = data.claudeApiKey || null;
         fishAudioApiKey = data.fishAudioApiKey || null;
         fishAudioReferenceId = data.fishAudioReferenceId || null;
-        console.log("Fish Audio config reloaded");
+        console.log(
+          "Config reloaded - Claude:",
+          claudeApiKey ? "Yes" : "No",
+          "Fish Audio:",
+          fishAudioApiKey ? "Yes" : "No"
+        );
       }
     );
     // Forward the message to all tabs
-    sendToActiveTab({ type: "RELOAD_FISH_AUDIO_CONFIG" });
+    chrome.tabs.query({}, (tabs) => {
+      for (const t of tabs) {
+        chrome.tabs.sendMessage(t.id, { type: "RELOAD_CONFIG" }, () => {
+          if (chrome.runtime.lastError) {
+            //ignore tabs without content scripts
+          }
+        });
+      }
+    });
   }
 
   // Handle TTS request from content script

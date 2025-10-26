@@ -13,7 +13,7 @@ class FishAudioTTS {
   // Initialize with API key from storage
   async init() {
     return new Promise((resolve) => {
-      chrome.storage.sync.get(['fishAudioApiKey', 'fishAudioReferenceId'], (data) => {
+      chrome.storage.local.get(['fishAudioApiKey', 'fishAudioReferenceId'], (data) => {
         this.apiKey = data.fishAudioApiKey || null;
         this.referenceId = data.fishAudioReferenceId || null;
         resolve(!!this.apiKey);
@@ -24,13 +24,13 @@ class FishAudioTTS {
   // Set API key
   setApiKey(key) {
     this.apiKey = key;
-    chrome.storage.sync.set({ fishAudioApiKey: key });
+    chrome.storage.local.set({ fishAudioApiKey: key });
   }
 
   // Set reference ID (voice model)
   setReferenceId(id) {
     this.referenceId = id;
-    chrome.storage.sync.set({ fishAudioReferenceId: id });
+    chrome.storage.local.set({ fishAudioReferenceId: id });
   }
 
   // Check if API key is configured
