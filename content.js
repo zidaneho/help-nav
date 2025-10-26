@@ -448,6 +448,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (click_point) {
         console.log("content.js: Using coordinates for targeting");
         el = findElementByCoordinates(click_point, bbox);
+        if (el) return el;
       }
 
       // Fallback: Use text selector only if no coordinates provided
@@ -456,8 +457,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           "content.js: No coordinates, falling back to text selector:",
           selector
         );
-        el = findElement(selector);
+        return findElement(selector);
       }
+      return null;
     }
 
     if (action === "scroll") {
@@ -492,21 +494,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         "Selector:",
         selector
       );
-      const el = findTargetElement(click_point, bbox, selector);
-
-      if (el) {
-        console.log("content.js: Element found, highlighting:", el);
-      }
-
-      // Fallback: Use text selector only if no coordinates provided
-      if (!el && selector) {
-        console.log(
-          "content.js: No coordinates, falling back to text selector:",
-          selector
-        );
-        el = findElement(selector);
-      }
-
+      const el = findTargetElement(click_point, bbox, selector);      
       if (el) {
         console.log("content.js: Element found, highlighting:", el);
         highlight(el);
